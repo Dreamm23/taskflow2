@@ -131,8 +131,34 @@ window.addEventListener("DOMContentLoaded", async () => {
   // Verificar se há token de convite na URL
   const hasToken = new URLSearchParams(window.location.search).get("token");
   if(hasToken){ checkInviteToken(); return; }
-  const saved = sessionStorage.getItem("tf_u");
-  if(saved){ S.user=JSON.parse(saved); await loadAll(); showApp(); }
+  // Tentar restaurar sessão do localStorage (persiste entre sessões)
+  const saved = localStorage.getItem("tf_u");
+  if(saved){
+    try {
+      const userData = JSON.parse(saved);
+      // Verificar se a sessão no servidor ainda é válida
+      const me = await api("/api/auth/me");
+      if(me && me.id){
+        S.user = me;
+        localStorage.setItem("tf_u", JSON.stringify(me));
+        await loadAll(); showApp(); return;
+      }
+      // Sessão expirou — tentar re-login automático com credenciais guardadas
+      const creds = localStorage.getItem("tf_creds");
+      if(creds){
+        const {email, password} = JSON.parse(creds);
+        const r = await api("/api/auth/login","POST",{email,password});
+        if(r.user){
+          S.user = r.user;
+          localStorage.setItem("tf_u", JSON.stringify(r.user));
+          await loadAll(); showApp(); return;
+        }
+      }
+      // Não conseguiu re-login — limpar e mostrar login
+      localStorage.removeItem("tf_u");
+      localStorage.removeItem("tf_creds");
+    } catch(e) { localStorage.removeItem("tf_u"); }
+  }
 });
 
 function initGoogle(){
@@ -186,7 +212,7 @@ async function handleGoogleCb(resp){
   const r = await api("/api/auth/google","POST",{credential:resp.credential});
   if(r.error){ toast(r.error,"e"); return; }
   const isNew = !r.user.department && !r.user.bio;
-  S.user=r.user; sessionStorage.setItem("tf_u",JSON.stringify(r.user));
+  S.user=r.user; localStorage.setItem("tf_u",JSON.stringify(r.user));
   await loadAll(); showApp(); toast(`Olá, ${S.user.name}! 👋`,"s");
   if(isNew) showOnboarding();
 }
@@ -269,9 +295,14 @@ function toggleEye(id,btn){ const i=document.getElementById(id); i.type=i.type==
 async function doLogin(ev){
   ev.preventDefault();
   const btn=ev.target.querySelector(".lg-cta,.auth-cta"); if(btn){btn.disabled=true; btn.textContent="A entrar...";}
-  const r=await api("/api/auth/login","POST",{email:document.getElementById("li-email").value,password:document.getElementById("li-pass").value});
+  const email = document.getElementById("li-email").value;
+  const password = document.getElementById("li-pass").value;
+  const r=await api("/api/auth/login","POST",{email, password});
   if(r.error){ showErr("li-err",r.error); if(btn){btn.disabled=false; btn.textContent="Entrar";} return; }
-  S.user=r.user; sessionStorage.setItem("tf_u",JSON.stringify(r.user));
+  S.user=r.user;
+  localStorage.setItem("tf_u", JSON.stringify(r.user));
+  // Guardar credenciais para auto-relogin quando a sessão expirar
+  localStorage.setItem("tf_creds", JSON.stringify({email, password}));
   await loadAll(); showApp(); toast(`Bem-vindo, ${S.user.name}! 👋`,"s");
 }
 
@@ -298,7 +329,7 @@ async function doVerifyCode(){
   if(code.length!==6){ showErr("verify-err","Insere o código de 6 dígitos."); return; }
   const r=await api("/api/auth/register/verify","POST",{email:S_pending_email,code});
   if(r.error){ showErr("verify-err",r.error); return; }
-  S.user=r.user; sessionStorage.setItem("tf_u",JSON.stringify(r.user));
+  S.user=r.user; localStorage.setItem("tf_u",JSON.stringify(r.user));
   await loadAll(); showApp(); toast(`Conta criada! Bem-vindo, ${S.user.name}! 🎉`,"s");
   // Mostrar onboarding para conta nova
   showOnboarding();
@@ -315,7 +346,7 @@ async function resendCode(){
 
 async function doLogout(){
   await api("/api/auth/logout","POST");
-  sessionStorage.removeItem("tf_u"); S.user=null;
+  localStorage.removeItem("tf_u"); S.user=null;
   document.getElementById("app").classList.add("hidden");
   document.getElementById("login-screen").classList.remove("hidden");
   toast("Sessão terminada","i");
@@ -718,7 +749,7 @@ async function acceptInvite(){
   }
   const r = await api("/api/invite/accept","POST",{token, name, password: pw});
   if(r.error){ errEl.textContent="⚠ "+r.error; errEl.style.display="block"; return; }
-  S.user = r.user; sessionStorage.setItem("tf_u", JSON.stringify(r.user));
+  S.user = r.user; localStorage.setItem("tf_u", JSON.stringify(r.user));
   document.getElementById("mo-invite").classList.add("hidden");
   // Limpar token da URL
   window.history.replaceState({}, "", "/");
@@ -1676,7 +1707,7 @@ async function uploadPic(uid, input){
     // Update local state
     const u = S.users.find(x=>x.id===uid);
     if(u) u.picture = data;
-    if(S.user?.id===uid){ S.user.picture=data; sessionStorage.setItem("tf_u",JSON.stringify(S.user)); }
+    if(S.user?.id===uid){ S.user.picture=data; localStorage.setItem("tf_u",JSON.stringify(S.user)); }
     toast("Foto atualizada! ✨","s");
     closeMo("mo-profile");
     setTimeout(()=>openProfile(uid),100);
@@ -2493,7 +2524,7 @@ async function doDeleteAccount(btn){
   if(r.error){ toast(r.error,"e"); btn.disabled=false; btn.textContent="Eliminar conta"; return; }
   document.querySelector(".mo")?.remove();
   toast("Conta eliminada. Até logo! 👋","i");
-  setTimeout(()=>{ sessionStorage.clear(); location.reload(); }, 1500);
+  setTimeout(()=>{ localStorage.removeItem("tf_u"); localStorage.removeItem("tf_creds"); location.reload(); }, 1500);
 }
 
 // ─── ADMIN FUNCTIONS ──────────────────────────
@@ -2533,7 +2564,7 @@ async function saveProfile(){
   const d={name:document.getElementById("s-name")?.value,department:document.getElementById("s-dept")?.value,phone:document.getElementById("s-phone")?.value,location:document.getElementById("s-loc")?.value,bio:document.getElementById("s-bio")?.value,skills:document.getElementById("s-skills")?.value.split(",").map(s=>s.trim()).filter(Boolean)};
   const r=await api(`/api/users/${S.user.id}`,"PATCH",d);
   if(r.error){toast(r.error,"e");return;}
-  Object.assign(S.user,d); sessionStorage.setItem("tf_u",JSON.stringify(S.user));
+  Object.assign(S.user,d); localStorage.setItem("tf_u",JSON.stringify(S.user));
   const ui=S.users.findIndex(u=>u.id===S.user.id); if(ui>=0)Object.assign(S.users[ui],d);
   updateSB(); toast("Perfil guardado!","s");
 }

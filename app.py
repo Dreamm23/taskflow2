@@ -520,6 +520,12 @@ def google_auth():
     except Exception as e:
         return jsonify({"error":f"Erro Google Auth: {str(e)}"}),400
 
+@app.route("/api/auth/me")
+def get_me():
+    cu = cur()
+    if not cu: return jsonify({"error":"Não autenticado"}),401
+    return jsonify(safe(cu))
+
 @app.route("/api/auth/logout", methods=["POST"])
 def logout():
     uid_v=session.get("uid")
