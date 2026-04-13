@@ -3398,15 +3398,84 @@ function toggleSidebar(){
     sb.classList.toggle("closed");
   }
 }
+
 function closeMobileSidebar(){
   document.getElementById("sidebar")?.classList.remove("mobile-open");
   document.getElementById("sb-overlay")?.classList.remove("on");
 }
+
+// Fechar sidebar ao clicar num item no mobile
 document.addEventListener("click", (e)=>{
   if(window.innerWidth <= 768 && e.target.closest(".sb-a")){
     setTimeout(closeMobileSidebar, 150);
   }
 });
+
+// Abrir Gemini no mobile — abre em modal
+function openMobileAI(){
+  // No mobile, abrir o painel AI como modal bottom sheet
+  const panel = document.getElementById("ai-panel");
+  if(!panel) return;
+  // Criar bottom sheet mobile
+  const existing = document.getElementById("mo-mobile-ai");
+  if(existing){ existing.remove(); return; }
+  const mo = document.createElement("div");
+  mo.id = "mo-mobile-ai";
+  mo.style.cssText = "position:fixed;inset:0;z-index:400;display:flex;flex-direction:column;justify-content:flex-end;background:rgba(0,0,0,.5)";
+  mo.innerHTML = `
+  <div style="background:var(--bg1);border-radius:20px 20px 0 0;height:85vh;display:flex;flex-direction:column;overflow:hidden">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--b1)">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="width:32px;height:32px;border-radius:10px;background:linear-gradient(135deg,#4285f4,#6366f1);display:flex;align-items:center;justify-content:center;font-size:14px;color:#fff">✦</div>
+        <div>
+          <div style="font-size:14px;font-weight:800;background:linear-gradient(135deg,#fff,#c4b5fd);-webkit-background-clip:text;-webkit-text-fill-color:transparent">Gemini AI</div>
+          <div style="font-size:10px;color:var(--ok);font-weight:600">● pronto</div>
+        </div>
+      </div>
+      <button onclick="document.getElementById('mo-mobile-ai').remove()" style="background:var(--bg3);border:1px solid var(--b1);border-radius:8px;width:30px;height:30px;color:var(--t3);cursor:pointer;font-size:14px">✕</button>
+    </div>
+    <div id="mobile-ai-msgs" style="flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px">
+      ${document.getElementById("ai-msgs")?.innerHTML || '<div style="padding:20px;text-align:center;color:var(--t3)">Inicia uma conversa com o Gemini!</div>'}
+    </div>
+    <div style="padding:12px;border-top:1px solid var(--b1);display:flex;gap:8px;align-items:flex-end">
+      <textarea id="mobile-ai-inp" placeholder="Pergunta ao Gemini..." rows="1"
+        style="flex:1;background:var(--bg3);border:1.5px solid var(--b1);border-radius:12px;padding:10px 14px;font-size:13px;color:var(--t);font-family:var(--font);resize:none;outline:none;max-height:90px"
+        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMobileAI()}"
+        oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,90)+'px'"></textarea>
+      <button onclick="sendMobileAI()" style="width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,#6366f1,#818cf8);border:none;color:#fff;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">↑</button>
+    </div>
+  </div>`;
+  mo.onclick = (e)=>{ if(e.target===mo) mo.remove(); };
+  document.body.appendChild(mo);
+  setTimeout(()=>document.getElementById("mobile-ai-inp")?.focus(), 300);
+}
+
+async function sendMobileAI(){
+  const inp = document.getElementById("mobile-ai-inp");
+  const msgs = document.getElementById("mobile-ai-msgs");
+  if(!inp || !msgs) return;
+  const msg = inp.value.trim();
+  if(!msg) return;
+  inp.value = ""; inp.style.height = "auto";
+  // Adicionar mensagem do user
+  msgs.innerHTML += `<div style="display:flex;justify-content:flex-end"><div style="background:linear-gradient(135deg,var(--a),#818cf8);color:#fff;padding:10px 14px;border-radius:14px 4px 14px 14px;max-width:85%;font-size:13px">${msg}</div></div>`;
+  msgs.scrollTop = msgs.scrollHeight;
+  // Usar o mesmo dispatcher do AI principal
+  const tid = "mob-ty-"+Date.now();
+  msgs.innerHTML += `<div id="${tid}" style="display:flex;gap:8px;align-items:center"><div style="width:28px;height:28px;border-radius:9px;background:linear-gradient(135deg,#4285f4,#6366f1);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px">✦</div><div style="color:var(--t3);font-size:13px">A pensar...</div></div>`;
+  msgs.scrollTop = msgs.scrollHeight;
+  // Sincronizar com AI principal
+  document.getElementById("ai-inp").value = msg;
+  appendAI("user", msg);
+  await smartAIDispatch(msg);
+  document.getElementById(tid)?.remove();
+  // Copiar última resposta do AI
+  const lastBot = document.getElementById("ai-msgs")?.querySelector(".ai-msg.bot:last-child .ai-bubble");
+  if(lastBot){
+    msgs.innerHTML += `<div style="display:flex;gap:8px"><div style="width:28px;height:28px;border-radius:9px;background:linear-gradient(135deg,#4285f4,#6366f1);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;flex-shrink:0">✦</div><div style="background:var(--bg3);border:1px solid var(--b1);padding:10px 14px;border-radius:4px 14px 14px 14px;max-width:85%;font-size:13px;color:var(--t)">${lastBot.innerHTML}</div></div>`;
+    msgs.scrollTop = msgs.scrollHeight;
+  }
+}
 
 // ═══════════════════════════════════════════════
 //  AI TASK CREATION

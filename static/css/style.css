@@ -1120,87 +1120,203 @@ select.fi { cursor: pointer }
 /* ════════════════════════════════════════
    RESPONSIVE — Mobile First
    ════════════════════════════════════════ */
+/* ════════════════════════════════════════════════
+   MOBILE RESPONSIVE — Completo
+   ════════════════════════════════════════════════ */
+
 @media (max-width: 768px) {
-  :root { --sb: 0px; font-size: 13px }
+  :root { --sb: 0px; font-size: 14px; --r: 12px; }
 
-  /* Hide sidebar by default on mobile */
+  /* ── Sidebar — drawer deslizante ── */
   #sidebar {
-    position: fixed; top: 0; left: 0; bottom: 0; z-index: 200;
-    width: 260px !important; min-width: 260px !important;
-    transform: translateX(-100%); transition: transform .25s ease;
-    box-shadow: 4px 0 20px rgba(0,0,0,.4);
-  }
-  #sidebar.mobile-open {
-    transform: translateX(0);
-  }
-  #sidebar.closed {
+    position: fixed; top: 0; left: 0; bottom: 0; z-index: 300;
+    width: 280px !important; min-width: 280px !important;
     transform: translateX(-100%);
+    transition: transform .28s cubic-bezier(.4,0,.2,1);
+    box-shadow: 8px 0 32px rgba(0,0,0,.5);
   }
+  #sidebar.mobile-open { transform: translateX(0); }
+  #sidebar.closed { transform: translateX(-100%); }
 
-  /* Mobile overlay */
+  /* ── Overlay escuro ── */
   #sb-overlay {
-    display: none; position: fixed; inset: 0; z-index: 199;
-    background: rgba(0,0,0,.5); backdrop-filter: blur(2px);
+    display: none; position: fixed; inset: 0; z-index: 299;
+    background: rgba(0,0,0,.6); backdrop-filter: blur(3px);
   }
-  #sb-overlay.on { display: block }
+  #sb-overlay.on { display: block; animation: fadeIn .2s ease; }
 
-  /* AI panel hidden on mobile */
-  #ai-panel { display: none !important }
+  /* ── Gemini AI — bottom sheet no mobile ── */
+  #ai-panel {
+    display: none !important;
+  }
 
-  /* Topbar adjustments */
-  #topbar { padding: 0 12px; gap: 8px }
-  .tb-title { font-size: 13px }
-  .tb-search { max-width: 160px; padding: 5px 9px }
-  .tb-search kbd { display: none }
-  .btn-cta { padding: 6px 11px; font-size: 12px }
-  .btn-outline { display: none }
+  /* ── Topbar mobile ── */
+  #topbar {
+    padding: 0 14px; gap: 8px; height: 54px;
+  }
+  .tb-title { font-size: 14px; font-weight: 700; }
+  .tb-search { max-width: 150px; padding: 6px 10px; }
+  .tb-search kbd { display: none; }
+  .btn-outline { display: none; }
 
-  /* Views padding */
-  #views { padding: 14px 14px }
+  /* Botão + Tarefa mais compacto */
+  .btn-cta { padding: 7px 12px !important; font-size: 12px !important; }
+  #btn-new-event { display: none; }
 
-  /* Stats row — 2 columns on mobile */
-  .stats-row { grid-template-columns: 1fr 1fr; gap: 10px }
-  .stat-num { font-size: 26px }
+  /* Ocultar atalho de teclado na pesquisa */
+  .tb-search kbd { display: none; }
 
-  /* Grid — single column */
-  .g2, .g21, .g3 { grid-template-columns: 1fr; gap: 12px }
+  /* ── Hamburger visível ── */
+  .tb-menu {
+    display: flex !important;
+    width: 36px; height: 36px;
+    align-items: center; justify-content: center;
+    background: var(--bg3); border-radius: 9px;
+    font-size: 16px;
+  }
 
-  /* Kanban — horizontal scroll */
-  .kanban { gap: 10px }
-  .k-col { min-width: 260px; width: 260px }
+  /* ── Views ── */
+  #views { padding: 14px 14px 80px; }
 
-  /* Login card — full screen */
-  .lg-card { border-radius: 14px; padding: 28px 22px 22px; max-width: 100% }
-  .lg-top { padding: 16px 18px }
+  /* ── Dashboard ── */
+  .stats-row {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 10px !important;
+  }
+  .stat-num { font-size: 28px !important; }
+  .stat-card { padding: 16px !important; }
+  #v-dashboard { padding: 0 !important; }
 
-  /* Team grid */
-  .team-grid { grid-template-columns: 1fr }
+  /* Gráficos em coluna */
+  .g2, .g21, .g3,
+  div[style*="grid-template-columns:minmax(0,3fr)"],
+  div[style*="grid-template-columns:repeat(2"],
+  div[style*="grid-template-columns:1fr 1fr"] {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
 
-  /* Notes grid */
-  .notes-grid { grid-template-columns: 1fr 1fr }
+  /* ── Kanban — scroll horizontal ── */
+  .kanban {
+    display: flex !important;
+    flex-direction: row !important;
+    overflow-x: auto !important;
+    gap: 12px !important;
+    padding-bottom: 16px !important;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+  }
+  .k-col {
+    min-width: 280px !important;
+    width: 280px !important;
+    flex-shrink: 0 !important;
+    scroll-snap-align: start;
+  }
 
-  /* Modal — full screen */
-  .modal { width: 95vw; max-width: 95vw; max-height: 92vh }
-  .modal.modal-wide { width: 95vw }
-  .td-wrap { flex-direction: column }
-  .td-side { width: 100%; border-left: none; border-top: 1px solid var(--b1); padding: 16px }
+  /* ── Notas ── */
+  .notes-grid { grid-template-columns: 1fr !important; }
 
-  /* Profile */
-  .pr-bg { flex-direction: column; align-items: center; text-align: center; padding: 20px }
-  .pr-stats { grid-template-columns: repeat(2,1fr) }
-  .pr-body { grid-template-columns: 1fr }
+  /* ── Equipa ── */
+  .team-grid { grid-template-columns: 1fr !important; }
 
-  /* Settings */
-  .stg-layout { grid-template-columns: 1fr; gap: 12px }
-  .stg-nav { flex-direction: row; flex-wrap: wrap; gap: 4px }
-  .stg-item { padding: 6px 10px; font-size: 12px }
+  /* ── Calendário ── */
+  .cal-grid { font-size: 11px; }
+  .cal-day { min-height: 55px; padding: 4px; }
+
+  /* ── Modal — quase full screen ── */
+  .modal {
+    width: 96vw !important; max-width: 96vw !important;
+    max-height: 94vh !important;
+    border-radius: 18px 18px 12px 12px !important;
+    margin: 0 !important;
+  }
+  .mo {
+    align-items: flex-end !important;
+    padding-bottom: 0 !important;
+  }
+  .td-wrap { flex-direction: column !important; }
+  .td-side {
+    width: 100% !important; border-left: none !important;
+    border-top: 1px solid var(--b1) !important; padding: 14px !important;
+  }
+
+  /* ── Login ── */
+  .lg-wrap { padding: 16px; align-items: center; justify-content: center; min-height: 100vh; }
+  .lg-card {
+    border-radius: 20px !important; padding: 28px 22px 24px !important;
+    max-width: 100% !important; width: 100% !important;
+  }
+
+  /* ── Perfil ── */
+  .pr-bg { flex-direction: column !important; align-items: center !important; text-align: center !important; padding: 20px !important; }
+  .pr-stats { grid-template-columns: repeat(2,1fr) !important; }
+  .pr-body { grid-template-columns: 1fr !important; }
+
+  /* ── Definições ── */
+  .stg-layout { grid-template-columns: 1fr !important; gap: 12px !important; }
+  .stg-nav { flex-direction: row !important; flex-wrap: wrap !important; gap: 4px !important; overflow-x: auto !important; }
+  .stg-item { padding: 6px 10px !important; font-size: 12px !important; white-space: nowrap !important; }
+
+  /* ── Chat ── */
+  .chat-layout { flex-direction: column !important; }
+  .chat-sidebar { width: 100% !important; max-height: 200px !important; border-right: none !important; border-bottom: 1px solid var(--b1) !important; }
+
+  /* ── Admin tabs ── */
+  #atab-stats, #atab-users, #atab-activity, #atab-system {
+    font-size: 11px !important; padding: 6px 10px !important;
+  }
+
+  /* ── Toast mais compacto ── */
+  .toast { min-width: unset !important; max-width: 90vw !important; font-size: 12px !important; }
+  #toasts { right: 8px !important; left: 8px !important; }
+
+  /* ── Botões de ação nas tarefas — maiores para toque ── */
+  .tc { padding: 12px !important; }
+  .tc button { min-width: 32px !important; min-height: 32px !important; }
+
+  /* ── FAB (Floating Action Button) para nova tarefa ── */
+  #mobile-fab {
+    display: flex !important;
+    position: fixed; bottom: 20px; right: 20px; z-index: 100;
+    width: 56px; height: 56px; border-radius: 50%;
+    background: linear-gradient(135deg, #6366f1, #a78bfa);
+    border: none; color: #fff; font-size: 24px; cursor: pointer;
+    box-shadow: 0 6px 24px rgba(99,102,241,.5);
+    align-items: center; justify-content: center;
+    transition: transform .15s, box-shadow .15s;
+  }
+  #mobile-fab:active { transform: scale(.92); }
+
+  /* ── Gemini — botão flutuante no mobile ── */
+  #mobile-ai-btn {
+    display: flex !important;
+    position: fixed; bottom: 20px; left: 20px; z-index: 100;
+    width: 48px; height: 48px; border-radius: 50%;
+    background: linear-gradient(135deg, #4285f4, #6366f1);
+    border: none; color: #fff; font-size: 20px; cursor: pointer;
+    box-shadow: 0 4px 16px rgba(66,133,244,.4);
+    align-items: center; justify-content: center;
+  }
+
+  /* Esconder elementos desktop no mobile */
+  .sb-collapse { display: none !important; }
 }
 
+/* ── Extra pequeno (320-480px) ── */
 @media (max-width: 480px) {
-  .stats-row { grid-template-columns: 1fr 1fr }
-  .stat-num { font-size: 22px }
-  .notes-grid { grid-template-columns: 1fr }
-  .tb-search { display: none }
+  .stats-row { grid-template-columns: 1fr 1fr !important; gap: 8px !important; }
+  .stat-num { font-size: 24px !important; }
+  .tb-search { display: none !important; }
+  #views { padding: 12px 12px 80px !important; }
+  .k-col { min-width: 260px !important; width: 260px !important; }
+  .lg-card { padding: 24px 18px !important; }
+}
+
+/* Desktop — esconder FAB e botão AI mobile */
+@media (min-width: 769px) {
+  #mobile-fab { display: none !important; }
+  #mobile-ai-btn { display: none !important; }
+  .tb-menu { display: none; }
 }
 
 /* ════════════════════════════════════════
