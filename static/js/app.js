@@ -193,20 +193,25 @@ async function handleGoogleCb(resp){
 
 async function loadAll(){
   try {
-    const [tasks,users,projects,events,notes,activity] = await Promise.all([
-      api("/api/tasks"), api("/api/users"), api("/api/projects"),
-      api("/api/events"), api("/api/notes"), api("/api/activity")
+    // Carregar tudo em paralelo para máxima performance
+    const [tasks, users, projects, events, notes, activity, notifs, cfg] = await Promise.all([
+      api("/api/tasks"),
+      api("/api/users"),
+      api("/api/projects"),
+      api("/api/events"),
+      api("/api/notes"),
+      api("/api/activity"),
+      api("/api/notifications"),
+      api("/api/config"),
     ]);
-    S.tasks   = Array.isArray(tasks)    ? tasks    : [];
-    S.users   = Array.isArray(users)    ? users    : [];
-    S.projects= Array.isArray(projects) ? projects : [];
-    S.events  = Array.isArray(events)   ? events   : [];
-    S.notes   = Array.isArray(notes)    ? notes    : [];
-    S.activity= Array.isArray(activity) ? activity : [];
-    S.notifs  = (await api("/api/notifications")) || [];
-    if(!Array.isArray(S.notifs)) S.notifs = [];
+    S.tasks    = Array.isArray(tasks)    ? tasks    : [];
+    S.users    = Array.isArray(users)    ? users    : [];
+    S.projects = Array.isArray(projects) ? projects : [];
+    S.events   = Array.isArray(events)   ? events   : [];
+    S.notes    = Array.isArray(notes)    ? notes    : [];
+    S.activity = Array.isArray(activity) ? activity : [];
+    S.notifs   = Array.isArray(notifs)   ? notifs   : [];
     updateNotifBadge();
-    const cfg = await api("/api/config");
     if(cfg && !cfg.error){ S.hasGemini=cfg.has_gemini; updateAIStatus(); }
   } catch(e) {
     console.error("[loadAll] Erro:", e);
@@ -4512,7 +4517,6 @@ function _startVoice(rec, targetInputId){
   toast("🎤 A ouvir... fala agora!","i");
 
   rec.onstart = ()=>{
-    console.log("[Voice] Microfone ativo");
   };
 
   rec.onresult = (e)=>{
@@ -4527,7 +4531,6 @@ function _startVoice(rec, targetInputId){
     if(!best) best = e.results[0][0].transcript;
     best = best.trim();
 
-    console.log("[Voice] Resultado:", best);
 
     const inp = document.getElementById(targetInputId||"ai-inp");
     if(inp){
@@ -4559,7 +4562,6 @@ function _startVoice(rec, targetInputId){
   };
 
   rec.onend = ()=>{
-    console.log("[Voice] Terminou. Resultado obtido:", gotResult);
     if(!gotResult && isListening){
       stopVoice();
       toast("🎤 Nenhuma fala detetada. Tenta novamente.","w");
@@ -4569,7 +4571,6 @@ function _startVoice(rec, targetInputId){
 
   try {
     rec.start();
-    console.log("[Voice] Iniciado");
   } catch(e){
     console.error("[Voice] Erro ao iniciar:", e);
     stopVoice();

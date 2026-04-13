@@ -8,6 +8,11 @@ from email.mime.multipart import MIMEMultipart
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "taskflow_v8_secret_k3y_2026_xR9#mP2$qN7@wL4")
+app.config["SESSION_COOKIE_SECURE"] = False
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["PERMANENT_SESSION_LIFETIME"] = 60 * 60 * 24 * 30  # 30 dias
+app.config["SESSION_COOKIE_NAME"] = "taskflow_session"
 
 # ── SEGURANÇA — Rate Limiting ────────────────────
 _rate_limit = {}  # ip -> {count, reset_time}
@@ -91,8 +96,12 @@ BASE_URL = os.environ.get("BASE_URL", "http://127.0.0.1:5000")
 
 # ═══════════════ DATABASE ═══════════════
 def get_db():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=10)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")   # Write-Ahead Logging — melhor performance
+    conn.execute("PRAGMA synchronous=NORMAL") # Mais rápido sem perda de dados
+    conn.execute("PRAGMA cache_size=-20000")  # Cache de 20MB
+    conn.execute("PRAGMA foreign_keys=ON")    # Integridade referencial
     return conn
 
 def init_db():
@@ -170,6 +179,26 @@ def init_db():
             conn.commit()
         except Exception:
             pass  # Coluna já existe — ignorar
+
+    # ── Índices para melhorar performance ────────────────────────────────────
+    indexes = [
+        "CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)",
+        "CREATE INDEX IF NOT EXISTS idx_tasks_assignee ON tasks(assignee)",
+        "CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project)",
+        "CREATE INDEX IF NOT EXISTS idx_tasks_deadline ON tasks(deadline)",
+        "CREATE INDEX IF NOT EXISTS idx_tasks_created ON tasks(created)",
+        "CREATE INDEX IF NOT EXISTS idx_activity_user ON activity(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_activity_created ON activity(created)",
+        "CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_chat_created ON chat_messages(created)",
+        "CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)",
+    ]
+    for idx in indexes:
+        try:
+            c.execute(idx)
+        except Exception:
+            pass
+    conn.commit()
 
     # Inserir dados demo se não existirem
     def d(n=0): return (datetime.now()+timedelta(days=n)).strftime("%Y-%m-%d")
@@ -423,6 +452,7 @@ def login():
     reset_login_limit(email)  # reset contador ao fazer login com sucesso
     u=map_user(row)
     conn=get_db(); conn.execute("UPDATE users SET online=1 WHERE id=?",(u["id"],)); conn.commit(); conn.close()
+    session.permanent = True
     session["uid"]=u["id"]; return jsonify({"user":safe(u)})
 
 @app.route("/api/auth/register/send-code", methods=["POST"])
@@ -462,7 +492,7 @@ def verify_code():
     conn.commit()
     row=conn.execute("SELECT * FROM users WHERE id=?",(new_id,)).fetchone()
     conn.close()
-    u=map_user(row); session["uid"]=u["id"]; return jsonify({"user":safe(u)})
+    u=map_user(row); session.permanent=True; session["uid"]=u["id"]; return jsonify({"user":safe(u)})
 
 @app.route("/api/auth/google", methods=["POST"])
 def google_auth():
@@ -486,7 +516,7 @@ def google_auth():
             conn.commit()
             row=conn.execute("SELECT * FROM users WHERE id=?",(new_id,)).fetchone()
             u=map_user(row)
-        conn.close(); session["uid"]=u["id"]; return jsonify({"user":safe(u)})
+        conn.close(); session.permanent=True; session["uid"]=u["id"]; return jsonify({"user":safe(u)})
     except Exception as e:
         return jsonify({"error":f"Erro Google Auth: {str(e)}"}),400
 
@@ -596,10 +626,20 @@ def del_project(pid):
 # ── TASKS ──────────────────────────────────────
 @app.route("/api/tasks")
 def get_tasks():
-    proj=request.args.get("project"); conn=get_db()
-    if proj: rows=conn.execute("SELECT * FROM tasks WHERE project=?",(proj,)).fetchall()
-    else: rows=conn.execute("SELECT * FROM tasks").fetchall()
-    conn.close(); return jsonify([map_task(r) for r in rows])
+    proj    = request.args.get("project")
+    status  = request.args.get("status")
+    limit   = min(int(request.args.get("limit", 200)), 500)  # máx 500
+    offset  = int(request.args.get("offset", 0))
+    conn = get_db()
+    where, params = [], []
+    if proj:   where.append("project=?");  params.append(proj)
+    if status: where.append("status=?");   params.append(status)
+    sql = "SELECT * FROM tasks"
+    if where: sql += " WHERE " + " AND ".join(where)
+    sql += f" ORDER BY pinned DESC, created DESC LIMIT {limit} OFFSET {offset}"
+    rows = conn.execute(sql, params).fetchall()
+    conn.close()
+    return jsonify([map_task(r) for r in rows])
 
 DEMO_DOMAINS = ["taskflow.io"]  # domínios de contas demo — não enviar emails
 
@@ -846,9 +886,24 @@ def get_admin_stats():
 
 @app.route("/api/stats")
 def get_stats():
-    conn=get_db(); rows=conn.execute("SELECT * FROM tasks").fetchall(); conn.close()
-    tasks=[map_task(r) for r in rows]; total=len(tasks); today=datetime.now().strftime("%Y-%m-%d")
-    return jsonify({"total":total,"done":sum(1 for t in tasks if t["status"]=="Concluído"),"inprog":sum(1 for t in tasks if t["status"]=="Em Progresso"),"review":sum(1 for t in tasks if t["status"]=="Revisão"),"todo":sum(1 for t in tasks if t["status"]=="A Fazer"),"overdue":sum(1 for t in tasks if t["deadline"] and t["deadline"]<today and t["status"]!="Concluído"),"pinned":sum(1 for t in tasks if t.get("pinned"))})
+    conn=get_db()
+    rows=conn.execute("SELECT * FROM tasks").fetchall()
+    conn.close()
+    tasks=[map_task(r) for r in rows]
+    total=len(tasks)
+    today=datetime.now().strftime("%Y-%m-%d")
+    done = sum(1 for t in tasks if t["status"]=="Concluído")
+    inprog = sum(1 for t in tasks if t["status"]=="Em Progresso")
+    review = sum(1 for t in tasks if t["status"]=="Revisão")
+    todo = sum(1 for t in tasks if t["status"]=="A Fazer")
+    overdue = sum(1 for t in tasks if t["deadline"] and t["deadline"]<today and t["status"]!="Concluído")
+    rate = round(done/total*100) if total else 0
+    return jsonify({
+        "total":total,"done":done,"inprog":inprog,"review":review,
+        "todo":todo,"overdue":overdue,"rate":rate,
+        "pinned":sum(1 for t in tasks if t.get("pinned")),
+        "today":sum(1 for t in tasks if t.get("deadline")==today and t["status"]!="Concluído")
+    })
 
 # ── GEMINI AI ────────────────────────────────────
 @app.route("/api/ai/chat", methods=["POST"])
@@ -886,7 +941,7 @@ def ai_chat():
                 if clean[0]["role"]=="user":
                     payload["contents"] = clean + [{"role":"user","parts":[{"text":simple_msg[:3000]}]}]
 
-        print(f"[Gemini] Payload size: {len(json.dumps(payload))} bytes, msgs: {len(payload['contents'])}")
+        # Payload enviado ao Gemini
 
         req=ur.Request(
             f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_KEY}",
