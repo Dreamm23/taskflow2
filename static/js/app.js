@@ -94,10 +94,35 @@ const api = async (url, m="GET", b=null, timeoutMs=15000) => {
     const timer = setTimeout(()=>controller.abort(), timeoutMs);
     const r = await fetch(url, {...o, signal:controller.signal});
     clearTimeout(timer);
-    if(!r.ok && r.status===401 && url!=="/api/auth/me"){
-      // Sessão expirada — redirecionar para login
-      console.warn("[API] 401 em",url,"— sessão expirada");
-      return {error:"Sessão expirada. Faz login novamente."};
+    if(!r.ok && r.status===401 && url!=="/api/auth/me" && url!=="/api/auth/login"){
+      // Sessão expirada — tentar re-login automático silencioso
+      const creds = localStorage.getItem("tf_creds");
+      if(creds){
+        try {
+          const {email, password} = JSON.parse(creds);
+          const relogin = await fetch("/api/auth/login",{
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({email,password})
+          });
+          const redata = await relogin.json();
+          if(redata.user){
+            S.user = redata.user;
+            localStorage.setItem("tf_u", JSON.stringify(redata.user));
+            // Repetir o pedido original após re-login
+            const r2 = await fetch(url, {...o});
+            return r2.json();
+          }
+        } catch(e2) {}
+      }
+      // Login Google ou sem credenciais — redirecionar para login silenciosamente
+      localStorage.removeItem("tf_u");
+      localStorage.removeItem("tf_creds");
+      S.user = null;
+      document.getElementById("app")?.classList.add("hidden");
+      document.getElementById("login-screen")?.classList.remove("hidden");
+      toast("A sessão expirou. Faz login novamente.","w");
+      return {error:"Sessão expirada."};
     }
     return r.json();
   } catch(e) {
