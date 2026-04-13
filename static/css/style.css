@@ -1852,3 +1852,206 @@ canvas {
   50% { opacity: .85; }
 }
 .sb-logo { animation: logoShine 3s ease infinite; }
+
+/* ── Dashboard limpo v2 ────────────────────── */
+
+/* Stat cards mais limpos */
+.stat-card {
+  padding: 22px 22px 18px !important;
+}
+.stat-card .stat-icon {
+  font-size: 28px !important;
+  margin-bottom: 12px !important;
+}
+.stat-val {
+  font-size: 36px !important;
+  font-weight: 800 !important;
+  letter-spacing: -1.5px !important;
+  line-height: 1 !important;
+}
+.stat-lbl {
+  font-size: 12px !important;
+  color: var(--t3) !important;
+  margin-top: 6px !important;
+  font-weight: 500 !important;
+}
+
+/* Stats grid com mais espaço */
+.stats-row {
+  gap: 14px !important;
+  margin-bottom: 20px !important;
+}
+
+/* Cards com padding maior */
+.card {
+  padding: 22px !important;
+}
+
+/* Títulos de secção mais limpos */
+.stitle {
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  letter-spacing: -.2px !important;
+}
+.shd {
+  margin-bottom: 16px !important;
+}
+
+/* Dashboard grid mais espaçada */
+#v-dashboard {
+  padding: 24px !important;
+}
+
+/* Barra de widgets — painel dropdown bonito */
+#dash-customize-panel {
+  animation: fadeInDown .15s ease;
+}
+@keyframes fadeInDown {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Charts mais limpos */
+.chart-wrap {
+  padding: 6px 0 !important;
+}
+
+/* Projetos na sidebar mais espaçados */
+.sb-proj-row {
+  padding: 7px 12px !important;
+}
+
+/* Topbar mais limpa */
+.topbar {
+  padding: 0 20px !important;
+  height: 52px !important;
+}
+
+/* Page title maior */
+#pg-title {
+  font-size: 16px !important;
+  font-weight: 700 !important;
+}
+
+/* ══════════════════════════════════════════
+   DASHBOARD REDESIGN — Limpo & Respirável
+   ══════════════════════════════════════════ */
+
+/* Remover barras coloridas do topo dos stat cards */
+.stat-card::before { display: none !important; }
+
+/* Stat cards com ícone e número side by side */
+.stat-card {
+  padding: 20px 22px !important;
+  border-radius: 16px !important;
+  background: var(--bg2) !important;
+  border: 1px solid var(--b1) !important;
+  position: relative !important;
+  overflow: hidden !important;
+}
+.stat-card::after {
+  content: '' !important;
+  position: absolute !important;
+  bottom: -20px; right: -20px !important;
+  width: 80px; height: 80px !important;
+  border-radius: 50% !important;
+  background: rgba(99,102,241,.04) !important;
+  display: block !important;
+}
+.stat-card:hover {
+  transform: translateY(-3px) !important;
+  border-color: rgba(99,102,241,.2) !important;
+  box-shadow: 0 12px 32px rgba(0,0,0,.2) !important;
+}
+
+/* Número maior e mais impactante */
+.stat-num {
+  font-size: 38px !important;
+  font-weight: 900 !important;
+  letter-spacing: -2px !important;
+  line-height: 1 !important;
+  margin: 8px 0 6px !important;
+  color: var(--t) !important;
+}
+.stat-lbl {
+  font-size: 12px !important;
+  color: var(--t3) !important;
+  font-weight: 500 !important;
+  letter-spacing: .1px !important;
+}
+.stat-icon {
+  font-size: 22px !important;
+}
+.stat-badge {
+  font-size: 10.5px !important;
+  padding: 3px 9px !important;
+  border-radius: 99px !important;
+  font-weight: 700 !important;
+}
+
+/* Stats grid */
+.stats-row {
+  display: grid !important;
+  grid-template-columns: repeat(4, 1fr) !important;
+  gap: 14px !important;
+  margin-bottom: 18px !important;
+}
+
+/* Cards mais respiráveis */
+.card {
+  border-radius: 16px !important;
+  padding: 20px 22px !important;
+  margin-bottom: 0 !important;
+}
+
+/* Grid dos gráficos */
+#v-dashboard > div[style*="grid"] {
+  gap: 16px !important;
+}
+
+/* Títulos das secções */
+.stitle {
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  color: var(--t) !important;
+}
+
+/* Dashboard padding */
+#v-dashboard {
+  padding: 0 !important;
+}
+
+/* Remover margens extras dos cards dentro do dashboard */
+#v-dashboard .card,
+#v-dashboard > div > .card {
+  margin-bottom: 0 !important;
+}
+
+/* Header do dashboard */
+#v-dashboard > div:first-child {
+  margin-bottom: 6px !important;
+}
+
+/* Streak widget mais compacto */
+.streak-grid {
+  gap: 3px !important;
+}
+
+/* Projetos row mais limpa */
+.proj-r {
+  padding: 10px 0 !important;
+}
+
+/* Activity items */
+.act-r {
+  padding: 8px 0 !important;
+}
+
+/* Barra de personalizar — mais discreta */
+#dash-customize-btn {
+  opacity: .7 !important;
+  transition: opacity .15s !important;
+}
+#dash-customize-btn:hover {
+  opacity: 1 !important;
+}

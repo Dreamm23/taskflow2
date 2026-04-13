@@ -891,13 +891,17 @@ function renderDash(){
       label:"📊 Estatísticas", html:`
       <div class="stats-row">
         ${[
-          {l:"Total de Tarefas",v:total,i:"📋",b:S.projects.length+" projetos",bc:"badge-neu",s:"s1"},
-          {l:"Concluídas",v:done,i:"✅",b:rate+"%",bc:"badge-ok",s:"s2"},
-          {l:"Em Progresso",v:inp,i:"⚙️",b:"ativas",bc:"badge-neu",s:"s3"},
-          {l:"Em Atraso",v:overdue,i:"🚨",b:overdue>0?"atenção":"em dia",bc:overdue>0?"badge-err":"badge-ok",s:"s4"},
+          {l:"Total de Tarefas", v:total, i:"📋", b:S.projects.length+" projetos", bc:"badge-neu", s:"s1", c:"#6366f1"},
+          {l:"Concluídas",       v:done,  i:"✅", b:rate+"%",                      bc:"badge-ok",  s:"s2", c:"#22c55e"},
+          {l:"Em Progresso",    v:inp,   i:"⚡", b:"ativas",                       bc:"badge-neu", s:"s3", c:"#f59e0b"},
+          {l:"Em Atraso",       v:overdue,i:"🚨",b:overdue>0?"atenção":"em dia",  bc:overdue>0?"badge-err":"badge-ok", s:"s4", c:overdue>0?"#ef4444":"#22c55e"},
         ].map(s=>`<div class="stat-card ${s.s}">
-          <div class="stat-top"><span class="stat-icon">${s.i}</span><span class="stat-badge ${s.bc}">${s.b}</span></div>
-          <div class="stat-num">${s.v}</div><div class="stat-lbl">${s.l}</div>
+          <div class="stat-top">
+            <div style="width:38px;height:38px;border-radius:10px;background:${s.c}18;display:flex;align-items:center;justify-content:center;font-size:18px">${s.i}</div>
+            <span class="stat-badge ${s.bc}">${s.b}</span>
+          </div>
+          <div class="stat-num" style="color:${s.c}">${s.v}</div>
+          <div class="stat-lbl">${s.l}</div>
         </div>`).join("")}
       </div>`
     },
@@ -1007,22 +1011,58 @@ function renderDash(){
   let html = `
   <!-- Checklist de setup -->
   ${buildSetupWidget()}
-  <!-- Barra de personalização -->
-  <div style="display:flex;align-items:center;justify-content:flex-end;margin-bottom:12px;gap:8px">
-    <span style="font-size:11.5px;color:var(--t3)">Widgets visíveis:</span>
-    ${Object.entries(WIDGETS).map(([k,v])=>`
-      <button onclick="toggleDashWidget('${k}')" style="padding:4px 10px;border-radius:6px;border:1px solid ${w.includes(k)?"var(--a)":"var(--b1)"};background:${w.includes(k)?"rgba(99,102,241,.1)":"transparent"};color:${w.includes(k)?"var(--a3)":"var(--t3)"};font-size:11px;cursor:pointer;font-weight:500">${v.label}</button>
-    `).join("")}
+  <!-- Barra de personalização — discreta, só ícone -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+    <div>
+      <div style="font-size:20px;font-weight:800;color:var(--t);letter-spacing:-.3px">Olá, ${S.user?.name?.split(" ")[0]} 👋</div>
+      <div style="font-size:12.5px;color:var(--t3);margin-top:2px">${new Date().toLocaleDateString("pt-PT",{weekday:"long",day:"numeric",month:"long"})}</div>
+    </div>
+    <div style="position:relative">
+      <button id="dash-customize-btn" onclick="toggleDashCustomize()" title="Personalizar dashboard" style="background:var(--bg3);border:1px solid var(--b1);border-radius:10px;padding:7px 12px;cursor:pointer;font-size:12px;color:var(--t3);display:flex;align-items:center;gap:6px;transition:all .15s" onmouseenter="this.style.borderColor='var(--b2)';this.style.color='var(--t)'" onmouseleave="this.style.borderColor='var(--b1)';this.style.color='var(--t3)'">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+        Personalizar
+      </button>
+      <div id="dash-customize-panel" style="display:none;position:absolute;right:0;top:calc(100% + 8px);background:var(--bg2);border:1px solid var(--b1);border-radius:14px;padding:14px;min-width:220px;z-index:100;box-shadow:var(--shadow)">
+        <div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Widgets visíveis</div>
+        ${Object.entries(WIDGETS).map(([k,v])=>`
+          <div onclick="toggleDashWidget('${k}')" style="display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:8px;cursor:pointer;transition:background .12s" onmouseenter="this.style.background='var(--bg3)'" onmouseleave="this.style.background='transparent'">
+            <div style="width:16px;height:16px;border-radius:4px;border:1.5px solid ${w.includes(k)?"var(--a)":"var(--b2)"};background:${w.includes(k)?"var(--a)":"transparent"};display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .12s">
+              ${w.includes(k)?'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>':""}
+            </div>
+            <span style="font-size:12.5px;color:${w.includes(k)?"var(--t)":"var(--t3)"}">${v.label}</span>
+          </div>
+        `).join("")}
+      </div>
+    </div>
   </div>`;
 
   // Render active widgets
-  w.forEach(wk=>{ if(WIDGETS[wk]?.html) html += WIDGETS[wk].html; });
+  w.forEach(wk=>{ if(WIDGETS[wk]?.html) html += `<div style="margin-bottom:14px">${WIDGETS[wk].html}</div>`; });
 
   document.getElementById("v-dashboard").innerHTML = html;
   requestAnimationFrame(()=>{
     if(w.includes("charts")) initCharts(wb,wlabels,tasks);
     if(w.includes("weather")) setTimeout(loadWeather, 100);
   });
+}
+
+function toggleDashCustomize(){
+  const panel = document.getElementById("dash-customize-panel");
+  if(!panel) return;
+  const isOpen = panel.style.display !== "none";
+  panel.style.display = isOpen ? "none" : "block";
+  // Fechar ao clicar fora
+  if(!isOpen){
+    setTimeout(()=>{
+      document.addEventListener("click", function handler(e){
+        if(!document.getElementById("dash-customize-btn")?.contains(e.target) &&
+           !panel?.contains(e.target)){
+          panel.style.display="none";
+          document.removeEventListener("click", handler);
+        }
+      });
+    }, 100);
+  }
 }
 
 function toggleDashWidget(key){
@@ -2678,13 +2718,23 @@ async function submitEvent(){
 //  PROJECT MODAL
 // ─────────────────────────────────────────────────
 function openNewProj(){
-  document.getElementById("np-name").value="";
-  document.getElementById("np-desc").value="";
-  document.getElementById("np-icon").value="📁";
-  document.getElementById("np-deadline").value="";
+  const mo = document.getElementById("mo-proj");
+  if(!mo){ toast("Erro ao abrir modal de projeto","e"); return; }
+  const npName = document.getElementById("np-name");
+  const npDesc = document.getElementById("np-desc");
+  const npIcon = document.getElementById("np-icon");
+  const npDeadline = document.getElementById("np-deadline");
+  if(npName) npName.value="";
+  if(npDesc) npDesc.value="";
+  if(npIcon) npIcon.value="📁";
+  if(npDeadline) npDeadline.value="";
   S.selColor="#6366f1";
-  document.querySelectorAll("#mo-proj .col-opt").forEach(e=>{e.classList.remove("on"); if(e.dataset.color==="#6366f1")e.classList.add("on");});
-  document.getElementById("mo-proj").classList.remove("hidden");
+  document.querySelectorAll("#mo-proj .col-opt").forEach(e=>{
+    e.classList.remove("on");
+    if(e.dataset.color==="#6366f1") e.classList.add("on");
+  });
+  mo.classList.remove("hidden");
+  setTimeout(()=>npName?.focus(), 100);
 }
 
 async function submitProj(){
