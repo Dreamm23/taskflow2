@@ -2,210 +2,588 @@
 <html lang="pt">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>TaskFlow</title>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0"/>
+<title>TaskFlow — Gestor de Tarefas Inteligente</title>
+<meta name="description" content="TaskFlow — Gestor de tarefas inteligente com IA, Kanban, calendário e colaboração em equipa."/>
+<meta name="theme-color" content="#6366f1"/>
+<meta property="og:title" content="TaskFlow"/>
+<meta property="og:description" content="Gestor de tarefas com IA, Kanban e colaboração em equipa."/>
+<meta property="og:type" content="website"/>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>"/>
+<!-- Fonts com display=swap para não bloquear rendering -->
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" media="print" onload="this.media='all'"/>
+<noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet"/></noscript>
+<script src="https://accounts.google.com/gsi/client" async defer onload="if(window.initGoogle)initGoogle()"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link rel="stylesheet" href="/static/css/style.css?v={{ css_v }}"/>
 <style>
-* { margin:0; padding:0; box-sizing:border-box; }
-html, body { background:#07070f; color:#f0f0fa; font-family:sans-serif; min-height:100vh; }
-
-/* LOGIN — visível por defeito, sempre */
-#login-screen {
-  position:fixed; inset:0; z-index:9999;
-  background:#07070f;
-  display:flex; flex-direction:column;
-  align-items:center; justify-content:center;
-}
-#login-screen.hidden { display:none; }
-
-/* APP — escondido por defeito */
-#app { display:none; height:100vh; overflow:hidden; }
-#app.visible { display:flex; }
-
-.hidden { display:none !important; }
-
-/* Login card */
-.card {
-  background:#14142a; border:1px solid rgba(99,102,241,.3);
-  border-radius:16px; padding:36px; width:100%; max-width:400px;
-  box-shadow:0 20px 60px rgba(0,0,0,.5);
-}
-.logo { display:flex; align-items:center; gap:10px; margin-bottom:28px; justify-content:center; }
-.logo-orb {
-  width:36px; height:36px; border-radius:10px;
-  background:linear-gradient(135deg,#6366f1,#a78bfa);
-  display:flex; align-items:center; justify-content:center; font-size:18px;
-}
-.logo span { font-size:20px; font-weight:800; }
-h2 { font-size:20px; font-weight:700; margin-bottom:4px; }
-p { color:#8888aa; font-size:13px; margin-bottom:24px; }
-label { display:block; font-size:12px; font-weight:600; color:#9090bb; margin-bottom:6px; }
-input {
-  width:100%; background:#1a1a32; border:1.5px solid rgba(99,102,241,.2);
-  border-radius:10px; padding:11px 14px; color:#f0f0fa; font-size:14px;
-  outline:none; margin-bottom:14px;
-}
-input:focus { border-color:#6366f1; }
-.btn {
-  width:100%; padding:12px; background:#6366f1; color:#fff;
-  border:none; border-radius:10px; font-size:14px; font-weight:600;
-  cursor:pointer; margin-top:4px;
-}
-.btn:hover { background:#4f52d9; }
-.err { color:#ef4444; font-size:12px; margin-bottom:10px; display:none; }
-
-/* App layout */
-#sidebar { width:220px; background:#0a0a16; border-right:1px solid rgba(99,102,241,.1); padding:20px 0; flex-shrink:0; }
-#main { flex:1; overflow-y:auto; padding:24px; }
-.sb-logo { display:flex; align-items:center; gap:10px; padding:0 16px 20px; border-bottom:1px solid rgba(99,102,241,.1); margin-bottom:12px; }
-.sb-orb { width:28px; height:28px; border-radius:8px; background:linear-gradient(135deg,#6366f1,#a78bfa); display:flex; align-items:center; justify-content:center; font-size:14px; }
-.sb-name { font-size:15px; font-weight:700; }
-.sb-link { display:flex; align-items:center; gap:8px; padding:9px 16px; color:#8888aa; cursor:pointer; border-radius:8px; margin:2px 8px; font-size:13px; }
-.sb-link:hover, .sb-link.active { background:rgba(99,102,241,.15); color:#f0f0fa; }
+#login-screen{display:flex!important}
+#login-screen.hidden{display:none!important}
+#app{display:none}
+#app.visible{display:flex!important}
 </style>
 </head>
 <body>
 
+<!-- ████████ LOGIN ████████ -->
 <div id="login-screen">
-  <div class="card">
-    <div class="logo">
-      <div class="logo-orb">⚡</div>
+  <div class="lg-bg"></div>
+
+  <!-- Logo topo -->
+  <div class="lg-top">
+    <div class="lg-brand">
+      <div class="lg-orb">⚡</div>
       <span>TaskFlow</span>
     </div>
-    <h2>Bem-vindo de volta</h2>
-    <p>Entra na tua conta para continuar</p>
-
-    <label>Email</label>
-    <input id="email" type="email" placeholder="email@exemplo.com" autocomplete="email"/>
-
-    <label>Password</label>
-    <input id="pass" type="password" placeholder="••••••••" autocomplete="current-password"/>
-
-    <div class="err" id="err"></div>
-    <button class="btn" onclick="doLogin()">Entrar</button>
   </div>
-</div>
 
-<div id="app">
-  <div id="sidebar">
-    <div class="sb-logo">
-      <div class="sb-orb">⚡</div>
-      <span class="sb-name">TaskFlow</span>
+  <!-- Card central -->
+  <div class="lg-card">
+
+    <!-- Título dinâmico -->
+    <div class="lg-head" id="lg-head">
+      <h2>Bem-vindo de volta</h2>
+      <p>Entra na tua conta para continuar</p>
     </div>
-    <div class="sb-link active" onclick="loadView('dashboard')">📊 Dashboard</div>
-    <div class="sb-link" onclick="loadView('kanban')">📋 Kanban</div>
-    <div class="sb-link" onclick="loadView('calendar')">📅 Calendário</div>
-    <div class="sb-link" onclick="loadView('notes')">📝 Notas</div>
-    <div class="sb-link" onclick="loadView('team')">👥 Equipa</div>
-    <div class="sb-link" onclick="loadView('reports')">📈 Relatórios</div>
-    <div class="sb-link" onclick="doLogout()" style="margin-top:auto;position:absolute;bottom:20px;left:0;right:0">⏻ Sair</div>
-  </div>
+
+    <!-- Tabs -->
+    <div class="lg-tabs">
+      <button class="lgtab active" onclick="switchTab('in')">Entrar</button>
+      <button class="lgtab" onclick="switchTab('reg')">Criar conta</button>
+    </div>
+
+    <!-- Google Identity Services -->
+    <div id="g_id_onload"
+      data-client_id=""
+      data-callback="handleGoogleCb"
+      data-auto_prompt="false">
+    </div>
+    <div id="google-btn-wrap" style="width:100%;display:flex;justify-content:center;margin-bottom:4px">
+      <div id="g_id_signin"
+        data-type="standard"
+        data-shape="rectangular"
+        data-theme="outline"
+        data-text="continue_with"
+        data-size="large"
+        data-logo_alignment="left"
+        data-width="352">
+      </div>
+    </div>
+
+    <div class="lg-divider"><span>ou</span></div>
+
+    <!-- Login -->
+    <form id="form-in" onsubmit="doLogin(event)">
+      <div class="lg-field">
+        <label>Email</label>
+        <input id="li-email" type="email" placeholder="o-teu@email.com" required autocomplete="email"/>
+      </div>
+      <div class="lg-field">
+        <label>Password</label>
+        <div class="lg-pw-wrap">
+          <input id="li-pass" type="password" placeholder="••••••••" required autocomplete="current-password"/>
+          <button type="button" class="lg-eye" onclick="toggleEye('li-pass',this)">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="auth-error hidden" id="li-err"></div>
+      <button class="lg-cta" type="submit">Entrar</button>
+    </form>
+
+    <!-- Register -->
+    <form id="form-reg" class="hidden" onsubmit="sendVerifyCode(event)">
+      <div class="lg-field">
+        <label>Nome completo</label>
+        <input id="rg-name" placeholder="O teu nome" required/>
+      </div>
+      <div class="lg-field">
+        <label>Email</label>
+        <input id="rg-email" type="email" placeholder="o-teu@email.com" required/>
+      </div>
+      <div class="lg-field">
+        <label>Password</label>
+        <div class="lg-pw-wrap">
+          <input id="rg-pass" type="password" placeholder="Mínimo 6 caracteres" required/>
+          <button type="button" class="lg-eye" onclick="toggleEye('rg-pass',this)">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="auth-error hidden" id="rg-err"></div>
+      <button class="lg-cta" type="submit">Enviar código de verificação</button>
+    </form>
+
+    <!-- Verify -->
+    <div id="form-verify" class="hidden">
+      <div class="lg-verify-icon">📬</div>
+      <div class="lg-verify-title">Verifica o teu email</div>
+      <div class="lg-verify-sub">Enviámos um código para<br/><strong id="verify-email-lbl"></strong></div>
+      <div class="lg-field" style="margin-top:20px">
+        <label>Código de 6 dígitos</label>
+        <input id="verify-code" placeholder="000000" maxlength="6"
+          style="text-align:center;font-size:24px;font-weight:800;letter-spacing:8px;font-family:var(--mono)"
+          oninput="this.value=this.value.replace(/[^0-9]/g,'')" autocomplete="one-time-code"/>
+      </div>
+      <div class="auth-error hidden" id="verify-err"></div>
+      <button class="lg-cta" onclick="doVerifyCode()">Verificar e criar conta</button>
+      <div class="lg-verify-links">
+        <button onclick="switchTab('reg')">← Voltar</button>
+        <span>·</span>
+        <button onclick="resendCode()">Reenviar código</button>
+      </div>
+    </div>
+
+  <!-- Footer -->
+  <div class="lg-footer">TaskFlow v5 · PAP Informática</div>
+</div>
+
+<!-- ████████ APP ████████ -->
+<div id="app">
+
+  <!-- Mobile overlay -->
+  <div id="sb-overlay" onclick="closeMobileSidebar()"></div>
+
+  <!-- FAB mobile — Nova tarefa -->
+  <button id="mobile-fab" onclick="document.getElementById('btn-new-task')?.click()" title="Nova tarefa">+</button>
+
+  <!-- Botão Gemini mobile -->
+  <button id="mobile-ai-btn" onclick="openMobileAI()" title="Gemini AI">✦</button>
+
+  <!-- SIDEBAR -->
+  <aside id="sidebar">
+    <!-- Logo -->
+    <div class="sb-logo-row">
+      <div class="sb-logo">
+        <div class="sb-orb">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="white" stroke="none"/>
+          </svg>
+        </div>
+        <span class="sb-wordmark">TaskFlow</span>
+      </div>
+      <button class="sb-collapse" onclick="toggleSidebar()" title="Fechar sidebar">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+    </div>
+
+    <!-- Nav -->
+    <div class="sb-nav">
+      <div class="sb-group">PRINCIPAL</div>
+      <a class="sb-a active" data-v="dashboard" onclick="nav('dashboard')">
+        <div class="sb-icon">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        </div>
+        <span>Dashboard</span>
+      </a>
+      <a class="sb-a" data-v="kanban" onclick="nav('kanban')">
+        <div class="sb-icon">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="5" height="18" rx="1"/><rect x="10" y="3" width="5" height="12" rx="1"/><rect x="17" y="3" width="5" height="15" rx="1"/></svg>
+        </div>
+        <span>Kanban</span>
+        <b class="sb-pill" id="b-ip">0</b>
+      </a>
+      <a class="sb-a" data-v="calendar" onclick="nav('calendar')">
+        <div class="sb-icon">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        </div>
+        <span>Calendário</span>
+      </a>
+      <a class="sb-a" data-v="notes" onclick="nav('notes')">
+        <div class="sb-icon">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        </div>
+        <span>Notas</span>
+      </a>
+      <a class="sb-a" data-v="team" onclick="nav('team')">
+        <div class="sb-icon">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        </div>
+        <span>Equipa</span>
+      </a>
+      <a class="sb-a" data-v="reports" onclick="nav('reports')">
+        <div class="sb-icon">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        </div>
+        <span>Relatórios</span>
+      </a>
+      <a class="sb-a" data-v="gantt" onclick="nav('gantt')">
+        <div class="sb-icon">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="7" height="3" rx="1"/><rect x="7" y="9" width="10" height="3" rx="1"/><rect x="5" y="14" width="8" height="3" rx="1"/><rect x="10" y="19" width="9" height="3" rx="1"/></svg>
+        </div>
+        <span>Timeline</span>
+      </a>
+      <a class="sb-a" data-v="automations" onclick="nav('automations')">
+        <div class="sb-icon">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        </div>
+        <span>Automações</span>
+        <b class="sb-pill" id="b-automations" style="display:none">0</b>
+      </a>
+      <a class="sb-a" data-v="chat" onclick="nav('chat')">
+        <div class="sb-icon">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </div>
+        <span>Chat</span>
+        <b class="sb-pill" id="b-chat" style="display:none">●</b>
+      </a>
+
+      <div class="sb-group" style="margin-top:16px">PROJETOS</div>
+      <div id="sb-projs"></div>
+    </div>
+
+    <!-- Footer -->
+    <div class="sb-footer">
+
+      <!-- Quick actions row -->
+      <div class="sb-quick-row">
+        <a class="sb-quick-btn" data-v="settings" onclick="nav('settings')" title="Definições">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <span>Definições</span>
+        </a>
+        <a class="sb-quick-btn sb-gemini-btn" onclick="toggleAI()" title="Gemini AI">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="url(#gq)" stroke-width="2">
+            <defs><linearGradient id="gq" x1="0" y1="0" x2="24" y2="24"><stop stop-color="#4285f4"/><stop offset="1" stop-color="#34a853"/></linearGradient></defs>
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+          </svg>
+          <span>Gemini AI</span>
+          <b class="sb-pill ai-pill" id="ai-pill">ON</b>
+        </a>
+      </div>
+
+      <!-- User card -->
+      <div class="sb-user-card" onclick="openProfile(S.user?.id)">
+        <div class="sb-user-av-wrap">
+          <div class="av sm" id="sb-av">?</div>
+          <div class="online-dot" id="sb-online"></div>
+        </div>
+        <div class="sb-me-info">
+          <div id="sb-name" class="sb-me-name">—</div>
+          <div id="sb-role" class="sb-me-role">—</div>
+        </div>
+        <svg class="sb-user-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
   <div id="main">
-    <h1 id="pg-title" style="font-size:22px;font-weight:800;margin-bottom:20px">Dashboard</h1>
-    <div id="view-content"></div>
+
+    <!-- TOPBAR -->
+    <div id="topbar">
+      <button class="tb-menu" onclick="toggleSidebar()">☰</button>
+      <h1 class="tb-title" id="pg-title">Dashboard</h1>
+
+      <div class="tb-search" onclick="focusSearch()">
+        <span class="tb-search-icon">⌕</span>
+        <input id="srch" placeholder="Pesquisar tarefas, projetos..." oninput="onSearch(this.value)" onkeydown="if(event.key==='Escape')clearSearch()"/>
+        <kbd>⌘K</kbd>
+      </div>
+
+      <div class="tb-actions">
+        <!-- Language toggle -->
+        <button class="tb-lang" id="lang-btn" onclick="toggleLang()" title="Language">
+          <span id="lang-label">PT</span>
+        </button>
+        <!-- Theme toggle -->
+        <button class="tb-icon" onclick="toggleTheme()" id="theme-btn" title="Tema">🌙</button>
+        <button class="tb-icon" id="nb" onclick="toggleNotif()" title="Notificações">
+          🔔<span class="notif-dot hidden" id="nb-dot"></span>
+        </button>
+        <button class="tb-icon" onclick="openPomodoro()" title="Pomodoro">🍅</button>
+        <button class="btn-cta" onclick="openNewTask()" id="btn-new-task">+ Tarefa</button>
+        <button class="btn-outline" onclick="openNewEvent()" id="btn-new-event">+ Evento</button>
+        <button class="tb-icon" onclick="doLogout()" title="Sair" style="font-size:15px">⏻</button>
+      </div>
+    </div>
+
+    <!-- VIEWS -->
+    <div id="views">
+      <div id="v-dashboard" class="view"></div>
+      <div id="v-kanban"    class="view hidden"></div>
+      <div id="v-calendar"  class="view hidden"></div>
+      <div id="v-notes"     class="view hidden"></div>
+      <div id="v-team"        class="view hidden"></div>
+      <div id="v-reports"     class="view hidden"></div>
+      <div id="v-gantt"       class="view hidden"></div>
+      <div id="v-automations" class="view hidden"></div>
+      <div id="v-chat"        class="view hidden"></div>
+      <div id="v-settings"  class="view hidden"></div>
+    </div>
+  </div>
+
+  <!-- AI PANEL -->
+  <div id="ai-panel">
+    <!-- Header com gradiente -->
+    <div class="ai-hdr">
+      <div class="ai-brand">
+        <div class="ai-brand-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div>
+          <div class="ai-name">Gemini AI</div>
+          <div class="ai-status" id="ai-status">pronto</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <button onclick="clearAIChat()" title="Limpar conversa" class="ai-icon-btn">🗑️</button>
+        <button class="ai-x" onclick="toggleAI()">✕</button>
+      </div>
+    </div>
+
+    <!-- Chips de ação rápida -->
+    <div class="ai-chips">
+      <button class="ai-chip" onclick="sendAI('Resumir todos os projetos e dar insights')">📊 Resumo</button>
+      <button class="ai-chip" onclick="sendAI('Quais tarefas estão urgentes ou em atraso?')">🚨 Urgentes</button>
+      <button class="ai-chip" onclick="sendAI('Analisar produtividade da equipa')">📈 Equipa</button>
+      <button class="ai-chip" onclick="sendAI('Que tarefas devo priorizar hoje?')">⚡ Hoje</button>
+    </div>
+
+    <!-- Mensagens -->
+    <div class="ai-msgs" id="ai-msgs">
+      <div class="ai-msg bot">
+        <div class="ai-av">✦</div>
+        <div class="ai-bubble">
+          Olá! Sou o teu assistente Gemini integrado no TaskFlow 👋
+          <div class="ai-bubble-list">
+            <div>📋 Resumos e insights dos projetos</div>
+            <div>📊 Análise de produtividade da equipa</div>
+            <div>⚡ Sugestões de priorização de tarefas</div>
+            <div>✨ Criação de tarefas por linguagem natural</div>
+          </div>
+          O que precisas?
+        </div>
+      </div>
+    </div>
+
+    <!-- Aviso sem chave -->
+    <div class="ai-no-key hidden" id="ai-nokey">
+      <span>🔑 Chave Gemini não configurada</span>
+      <button onclick="nav('settings');setStab('ia')">Configurar →</button>
+    </div>
+
+    <!-- Input -->
+    <div class="ai-input-row">
+      <textarea id="ai-inp" class="ai-inp" placeholder="Pergunta ao Gemini... (ou usa o microfone 🎤)" rows="1"
+        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendAIInput()}"
+        oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,100)+'px'"></textarea>
+      <button id="voice-btn" onclick="toggleVoiceInput('ai-inp')" title="Criar tarefa por voz" class="ai-icon-btn">🎤</button>
+      <button class="ai-send" id="ai-send" onclick="sendAIInput()" title="Enviar">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      </button>
+    </div>
   </div>
 </div>
+
+<!-- ████████ MODAIS ████████ -->
+
+<!-- ONBOARDING -->
+<div class="mo hidden" id="mo-onboard" style="z-index:9999">
+  <div class="modal" style="max-width:480px;padding:0;overflow:hidden">
+    <!-- Progress bar -->
+    <div style="height:3px;background:var(--bg3)">
+      <div id="ob-progress" style="height:100%;background:linear-gradient(90deg,#6366f1,#a78bfa);width:33%;transition:width .35s ease"></div>
+    </div>
+    <div style="padding:32px">
+      <!-- Step 1 -->
+      <div id="ob-step1">
+        <div style="font-size:28px;margin-bottom:8px">👋</div>
+        <h2 style="font-size:19px;font-weight:800;margin-bottom:6px">Bem-vindo ao TaskFlow!</h2>
+        <p style="color:var(--t3);font-size:13px;margin-bottom:28px;line-height:1.6">Responde a 2 perguntas rápidas para personalizarmos a tua experiência.</p>
+        <div style="font-size:13px;font-weight:600;margin-bottom:12px;color:var(--t2)">Como vais usar o TaskFlow?</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px" id="ob-type-opts">
+          <div class="ob-opt" data-val="pessoal" onclick="obSelect('type',this)">
+            <div style="font-size:26px;margin-bottom:8px">🧑</div>
+            <div style="font-weight:700;font-size:13px">Pessoal</div>
+            <div style="font-size:11px;color:var(--t3);margin-top:3px">Projetos e tarefas individuais</div>
+          </div>
+          <div class="ob-opt" data-val="empresarial" onclick="obSelect('type',this)">
+            <div style="font-size:26px;margin-bottom:8px">🏢</div>
+            <div style="font-weight:700;font-size:13px">Empresarial</div>
+            <div style="font-size:11px;color:var(--t3);margin-top:3px">Equipa e colaboração</div>
+          </div>
+        </div>
+        <button class="btn-cta" style="width:100%;margin-top:20px" onclick="obNext(1)">Continuar →</button>
+      </div>
+      <!-- Step 2 -->
+      <div id="ob-step2" class="hidden">
+        <!-- Conteúdo injetado dinamicamente pelo JS consoante pessoal/empresarial -->
+      </div>
+      <!-- Step 3 -->
+      <div id="ob-step3" class="hidden">
+        <!-- Conteúdo injetado dinamicamente pelo JS consoante pessoal/empresarial -->
+      </div>
+      <div id="ob-step4" class="hidden">
+        <!-- Só para fluxo empresarial — injetado pelo JS -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- INVITE ACCEPT -->
+<div class="mo hidden" id="mo-invite">
+  <div class="modal" style="max-width:420px;padding:0;overflow:hidden">
+    <div style="padding:32px">
+      <div style="font-size:28px;margin-bottom:8px">🎉</div>
+      <h2 style="font-size:18px;font-weight:800;margin-bottom:4px">Convite recebido!</h2>
+      <p id="inv-desc" style="color:var(--t3);font-size:13px;margin-bottom:24px"></p>
+      <div class="fg" style="margin-bottom:12px">
+        <label style="font-size:12px;font-weight:600;color:var(--t2);display:block;margin-bottom:6px">O teu nome</label>
+        <input class="fi" id="inv-name" placeholder="Nome completo"/>
+      </div>
+      <div class="fg" style="margin-bottom:12px">
+        <label style="font-size:12px;font-weight:600;color:var(--t2);display:block;margin-bottom:6px">Email</label>
+        <input class="fi" id="inv-email" readonly style="opacity:.6"/>
+      </div>
+      <div class="fg" style="margin-bottom:20px">
+        <label style="font-size:12px;font-weight:600;color:var(--t2);display:block;margin-bottom:6px">Criar password</label>
+        <input class="fi" id="inv-pass" type="password" placeholder="Mínimo 6 caracteres"/>
+      </div>
+      <div id="inv-err" style="color:var(--err);font-size:12px;margin-bottom:10px;display:none"></div>
+      <button class="btn-cta" style="width:100%" onclick="acceptInvite()">Criar conta e entrar →</button>
+    </div>
+  </div>
+</div>
+
+<!-- Nova Tarefa -->
+<div class="mo hidden" id="mo-task" onclick="if(event.target===this)closeMo('mo-task')">
+  <div class="modal">
+    <div class="mhd"><h3>Nova Tarefa</h3><button onclick="closeMo('mo-task')">✕</button></div>
+    <div class="mbody">
+      <div class="fg"><label>Título *</label><input class="fi" id="mt-title" placeholder="Título da tarefa..."/></div>
+      <div class="fg mt10"><label>Descrição</label><textarea class="fi" id="mt-desc" rows="3" placeholder="Detalhes, contexto..."></textarea></div>
+      <div class="frow mt10">
+        <div class="fg"><label>Estado</label><select class="fi" id="mt-status"><option>A Fazer</option><option>Em Progresso</option><option>Revisão</option><option>Concluído</option></select></div>
+        <div class="fg"><label>Prioridade</label><select class="fi" id="mt-prio"><option value="high">🔴 Alta</option><option value="medium" selected>🟡 Média</option><option value="low">🟢 Baixa</option></select></div>
+      </div>
+      <div class="frow mt10">
+        <div class="fg"><label>Responsável</label><select class="fi" id="mt-asgn"></select></div>
+        <div class="fg"><label>Prazo</label><input type="date" class="fi" id="mt-dl"/></div>
+      </div>
+      <div class="fg mt10"><label>Projeto</label><select class="fi" id="mt-proj"></select></div>
+      <div class="fg mt10"><label>Tags</label><div class="tag-pick" id="mt-tags"></div></div>
+      <div class="fg mt10">
+        <label>Subtarefas</label>
+        <div class="sub-adder"><input class="fi" id="mt-sub-i" placeholder="Nova subtarefa..." onkeydown="if(event.key==='Enter')addSub()"/><button class="btn-xs" onclick="addSub()">+</button></div>
+        <div id="mt-subs"></div>
+      </div>
+      <div class="frow mt10">
+        <div class="fg">
+          <label>🔁 Repetição</label>
+          <select class="fi" id="mt-recur" onchange="toggleRecurEnd()">
+            <option value="">Sem repetição</option>
+            <option value="daily">Diariamente</option>
+            <option value="weekly">Semanalmente</option>
+            <option value="biweekly">De 2 em 2 semanas</option>
+            <option value="monthly">Mensalmente</option>
+          </select>
+        </div>
+        <div class="fg" id="mt-recur-end-wrap" style="display:none">
+          <label>Termina em</label>
+          <input type="date" class="fi" id="mt-recur-end" title="Data em que a repetição termina (opcional)"/>
+        </div>
+      </div>
+    </div>
+    <div class="mfoot"><button class="btn-ghost" onclick="closeMo('mo-task')">Cancelar</button><button class="btn-cta" onclick="submitTask()">Criar Tarefa</button></div>
+  </div>
+</div>
+
+<!-- Detalhe Tarefa / Evento -->
+<div class="mo hidden" id="mo-detail" onclick="if(event.target===this)closeMo('mo-detail')">
+  <div class="modal modal-wide" id="mo-detail-body"></div>
+</div>
+
+<!-- Perfil -->
+<div class="mo hidden" id="mo-profile" onclick="if(event.target===this)closeMo('mo-profile')">
+  <div class="modal modal-wide" id="mo-profile-body"></div>
+</div>
+
+<!-- Novo Evento -->
+<div class="mo hidden" id="mo-event" onclick="if(event.target===this)closeMo('mo-event')">
+  <div class="modal">
+    <div class="mhd"><h3>Novo Evento</h3><button onclick="closeMo('mo-event')">✕</button></div>
+    <div class="mbody">
+      <div class="fg"><label>Título *</label><input class="fi" id="ev-title" placeholder="Nome do evento..."/></div>
+      <div class="fg mt10"><label>Descrição</label><textarea class="fi" id="ev-desc" rows="2"></textarea></div>
+      <div class="frow mt10">
+        <div class="fg"><label>Início</label><input type="datetime-local" class="fi" id="ev-start"/></div>
+        <div class="fg"><label>Fim</label><input type="datetime-local" class="fi" id="ev-end"/></div>
+      </div>
+      <div class="frow mt10">
+        <div class="fg"><label>Tipo</label>
+          <select class="fi" id="ev-type">
+            <option value="meeting">🤝 Reunião</option><option value="review">🔍 Revisão</option>
+            <option value="deploy">🚀 Deploy</option><option value="deadline">⏰ Deadline</option>
+            <option value="workshop">🎓 Workshop</option><option value="other">📌 Outro</option>
+          </select>
+        </div>
+        <div class="fg"><label>Projeto</label><select class="fi" id="ev-proj"><option value="">Nenhum</option></select></div>
+      </div>
+      <div class="fg mt10"><label>Cor</label><div class="color-row" id="ev-colors"></div></div>
+      <div class="fg mt10"><label>Participantes</label><div id="ev-atts" class="atts-wrap"></div></div>
+    </div>
+    <div class="mfoot"><button class="btn-ghost" onclick="closeMo('mo-event')">Cancelar</button><button class="btn-cta" onclick="submitEvent()">Criar</button></div>
+  </div>
+</div>
+
+<!-- Novo Projeto -->
+<div class="mo hidden" id="mo-proj" onclick="if(event.target===this)closeMo('mo-proj')">
+  <div class="modal">
+    <div class="mhd"><h3>Novo Projeto</h3><button onclick="closeMo('mo-proj')">✕</button></div>
+    <div class="mbody">
+      <div class="fg"><label>Nome *</label><input class="fi" id="np-name" placeholder="Nome do projeto..."/></div>
+      <div class="fg mt10"><label>Descrição</label><textarea class="fi" id="np-desc" rows="2"></textarea></div>
+      <div class="frow mt10">
+        <div class="fg"><label>Ícone</label><input class="fi" id="np-icon" placeholder="📁" style="font-size:18px;text-align:center" maxlength="2"/></div>
+        <div class="fg"><label>Prazo</label><input type="date" class="fi" id="np-deadline"/></div>
+      </div>
+      <div class="fg mt10"><label>Cor</label><div class="color-row" id="np-colors"></div></div>
+    </div>
+    <div class="mfoot"><button class="btn-ghost" onclick="closeMo('mo-proj')">Cancelar</button><button class="btn-cta" onclick="submitProj()">Criar Projeto</button></div>
+  </div>
+</div>
+
+<!-- Pomodoro -->
+<div class="mo hidden" id="mo-pomo" onclick="if(event.target===this)closeMo('mo-pomo')">
+  <div class="modal" style="max-width:320px;text-align:center">
+    <div class="mhd" style="justify-content:center"><h3>🍅 Pomodoro</h3><button onclick="closeMo('mo-pomo')" style="margin-left:auto">✕</button></div>
+    <div class="mbody">
+      <div class="pomo-tabs">
+        <button class="ptab active" onclick="setPomoMode('work',25,this)">Foco</button>
+        <button class="ptab" onclick="setPomoMode('short',5,this)">Pausa curta</button>
+        <button class="ptab" onclick="setPomoMode('long',15,this)">Pausa longa</button>
+      </div>
+      <div class="pomo-ring">
+        <svg width="160" height="160" viewBox="0 0 160 160">
+          <circle cx="80" cy="80" r="68" fill="none" stroke="var(--bg4)" stroke-width="8"/>
+          <circle id="pomo-ring" cx="80" cy="80" r="68" fill="none" stroke="#6366f1" stroke-width="8" stroke-linecap="round" stroke-dasharray="427" stroke-dashoffset="0" transform="rotate(-90 80 80)" style="transition:stroke-dashoffset .5s"/>
+        </svg>
+        <div class="pomo-time" id="pomo-clock">25:00</div>
+      </div>
+      <div class="pomo-lbl" id="pomo-lbl">Seleciona uma tarefa para focar</div>
+      <select class="fi" id="pomo-task" style="margin-bottom:16px;text-align:center"></select>
+      <div style="display:flex;gap:8px;justify-content:center">
+        <button class="pomo-play" id="pomo-play" onclick="togglePomo()">▶ Iniciar</button>
+        <button class="pomo-reset" onclick="resetPomo()">↺</button>
+      </div>
+      <div class="pomo-count" id="pomo-count">🍅 Sessões hoje: 0</div>
+    </div>
+  </div>
+</div>
+
+<!-- Notificações -->
+<div id="notif-panel" class="hidden">
+  <div class="np-hdr"><span>Notificações</span><button onclick="markAllRead()">Marcar lidas</button></div>
+  <div id="notif-list"></div>
+</div>
+<div id="notif-overlay" class="hidden" onclick="closeNotif()"></div>
+
+<!-- Toasts -->
+<div id="toasts"></div>
 
 <script src="/static/js/app.js?v={{ js_v }}"></script>
-<link rel="stylesheet" href="/static/css/style.css?v={{ css_v }}"/>
-
-<script>
-// Boot simples e direto
-(function boot(){
-  var ls = document.getElementById('login-screen');
-  var ap = document.getElementById('app');
-
-  // Garantir estado inicial correto
-  ls.classList.remove('hidden');
-  ap.classList.remove('visible');
-
-  // Tentar restaurar sessão
-  var saved = localStorage.getItem('tf_u');
-  if(!saved){ return; }
-
-  fetch('/api/auth/me')
-    .then(function(r){ return r.json(); })
-    .then(function(me){
-      if(me && me.id && !me.error){
-        window.S = window.S || {};
-        window.S.user = me;
-        if(typeof loadAll === 'function'){
-          loadAll().then(function(){ showApp(); });
-        } else {
-          showApp();
-        }
-      } else {
-        localStorage.removeItem('tf_u');
-        localStorage.removeItem('tf_creds');
-      }
-    })
-    .catch(function(){ localStorage.removeItem('tf_u'); });
-})();
-
-function doLogin(){
-  var email = document.getElementById('email').value;
-  var pass  = document.getElementById('pass').value;
-  var errEl = document.getElementById('err');
-  var btn   = document.querySelector('.btn');
-
-  if(!email || !pass){ errEl.textContent='Preenche email e password.'; errEl.style.display='block'; return; }
-  btn.textContent = 'A entrar...'; btn.disabled = true;
-
-  fetch('/api/auth/login', {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({email:email, password:pass})
-  })
-  .then(function(r){ return r.json(); })
-  .then(function(data){
-    btn.textContent='Entrar'; btn.disabled=false;
-    if(data.error){ errEl.textContent='⚠ '+data.error; errEl.style.display='block'; return; }
-    localStorage.setItem('tf_u', JSON.stringify(data.user));
-    localStorage.setItem('tf_creds', JSON.stringify({email:email, password:pass}));
-    if(window.S) window.S.user = data.user;
-    errEl.style.display='none';
-    if(typeof loadAll === 'function'){
-      loadAll().then(function(){ showApp(); });
-    } else {
-      showApp();
-    }
-  })
-  .catch(function(e){
-    btn.textContent='Entrar'; btn.disabled=false;
-    errEl.textContent='Erro de ligação: '+e.message; errEl.style.display='block';
-  });
-}
-
-function showApp(){
-  document.getElementById('login-screen').classList.add('hidden');
-  var ap = document.getElementById('app');
-  ap.classList.add('visible');
-  ap.style.display = 'flex';
-  if(typeof renderDash === 'function') renderDash();
-}
-
-function doLogout(){
-  fetch('/api/auth/logout', {method:'POST'});
-  localStorage.removeItem('tf_u');
-  localStorage.removeItem('tf_creds');
-  document.getElementById('app').classList.remove('visible');
-  document.getElementById('app').style.display = 'none';
-  document.getElementById('login-screen').classList.remove('hidden');
-}
-
-function loadView(v){
-  document.querySelectorAll('.sb-link').forEach(function(el){ el.classList.remove('active'); });
-  event.target.classList.add('active');
-  document.getElementById('pg-title').textContent = {
-    dashboard:'Dashboard', kanban:'Kanban', calendar:'Calendário',
-    notes:'Notas', team:'Equipa', reports:'Relatórios'
-  }[v] || v;
-  if(typeof render === 'function') render(v);
-}
-
-// Input enter
-document.getElementById('pass').addEventListener('keydown', function(e){
-  if(e.key==='Enter') doLogin();
-});
-</script>
 </body>
 </html>
