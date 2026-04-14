@@ -143,6 +143,7 @@ async function refreshAll(opts={}){
   if(opts.activity!==false) toFetch.push(api("/api/activity").then(r=>{ if(Array.isArray(r)) S.activity=r; }));
   if(opts.projects) toFetch.push(api("/api/projects").then(r=>{ if(Array.isArray(r)) S.projects=r; }));
   if(opts.users) toFetch.push(api("/api/users").then(r=>{ if(Array.isArray(r)) S.users=r; }));
+  if(opts.notifs) toFetch.push(api("/api/notifications").then(r=>{ if(Array.isArray(r)){ S.notifs=r; updateNotifBadge(); } }));
   await Promise.all(toFetch);
   updateSB();
   render(S.view);
@@ -271,10 +272,12 @@ async function loadAll(){
 }
 
 async function checkNotifs(){
-  const n=await api("/api/notifications");
-  const u=n.filter(x=>!x.read).length;
-  const d=document.getElementById("nb-dot");
-  u>0 ? d.classList.remove("hidden") : d.classList.add("hidden");
+  try {
+    const n = await api("/api/notifications");
+    if(!Array.isArray(n)) return;
+    S.notifs = n;
+    updateNotifBadge();
+  } catch(e) {}
   renderNotifList(n);
 }
 
@@ -2993,7 +2996,7 @@ async function smartAIDispatch(msg){
   const doneTasks = S.tasks.filter(t=>t.status==="Concluído").length;
   const overdue = S.tasks.filter(t=>t.deadline&&t.deadline<today&&t.status!=="Concluído").length;
   const inprog = S.tasks.filter(t=>t.status==="Em Progresso").length;
-  const taskList = S.tasks.slice(0,20).map(t=>`${t.title}[${t.status}/${PRIO[t.priority]?.l||"?"}${t.assignee?"/"+S.users.find(u=>u.id===t.assignee)?.name?.split(" ")[0]:""}${t.deadline?"/"+t.deadline:""}]`).join("|");
+  const taskList = S.tasks.slice(0,30).map(t=>`${t.title}[${t.status}/${PRIO[t.priority]?.l||"?"}${t.assignee?"/"+S.users.find(u=>u.id===t.assignee)?.name?.split(" ")[0]:""}${t.deadline?"/"+t.deadline:""}]`).join("|");
 
   const systemPrompt = `És o assistente TaskFlow — útil, direto e em português de Portugal.
 
@@ -3019,7 +3022,7 @@ EXEMPLOS chat: "resumo", "análise", "como está", "quais tarefas", "ajuda", "o 
   try {
     const r = await api("/api/ai/chat","POST",{
       message: msg,
-      history: S.aiHistory.slice(-6),
+      history: S.aiHistory.slice(-10),
       context: systemPrompt
     });
 
@@ -3109,7 +3112,7 @@ async function executeCreateTask(taskData, confirmMsg, originalMsg){
 
   S.aiHistory.push({role:"user",text:originalMsg},{role:"model",text:successMsg});
   appendAI("bot", successMsg);
-  toast("✨ Tarefa criada pela IA!","s");
+  toast(`✨ Tarefa "${created.title}" criada pela IA!`,"s");
 }
 
 async function sendAI(msg){
@@ -3575,7 +3578,7 @@ Responde APENAS com JSON válido (sem texto, sem markdown, sem explicação):
 👤 Responsável: ${assigneeName || "Nenhum"}
 🔴 Prioridade: ${created.priority}
 📅 Prazo: ${created.deadline || "Sem prazo"}`);
-    toast("✨ Tarefa criada pela IA!","s");
+    toast(`✨ Tarefa "${created.title}" criada pela IA!`,"s");
   } catch(e){ 
     const msgs = document.querySelectorAll(".ai-msg.bot");
     msgs[msgs.length-1]?.remove();

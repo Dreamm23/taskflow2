@@ -660,7 +660,11 @@ def is_real_email(email):
 def create_task():
     cu=cur()
     if not cu: return jsonify({"error":"Não autenticado"}),401
-    d=request.json; tid=uid(); conn=get_db()
+    d=request.json or {}
+    title = d.get("title","").strip()
+    if not title: return jsonify({"error":"Título obrigatório"}),400
+    if len(title) > 200: return jsonify({"error":"Título demasiado longo (máx 200 chars)"}),400
+    tid=uid(); conn=get_db()
     assignee_id=d.get("assignee","")
     conn.execute("INSERT INTO tasks VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (tid,d.get("title",""),d.get("description",""),d.get("status","A Fazer"),d.get("priority","medium"),
@@ -858,7 +862,8 @@ def read_all_notifs():
 @app.route("/api/activity")
 def get_activity():
     conn=get_db()
-    rows=conn.execute("SELECT a.*, u.name as uname, u.color as ucolor, u.avatar as uavatar FROM activity a LEFT JOIN users u ON a.user_id=u.id ORDER BY a.created DESC LIMIT 100").fetchall()
+    limit = min(int(request.args.get("limit", 50)), 200)
+    rows=conn.execute("SELECT a.*, u.name as uname, u.color as ucolor, u.avatar as uavatar FROM activity a LEFT JOIN users u ON a.user_id=u.id ORDER BY a.created DESC LIMIT ?", (limit,)).fetchall()
     conn.close()
     return jsonify([{"id":r["id"],"user":r["user_id"],"userName":r["uname"],"userColor":r["ucolor"],"userAvatar":r["uavatar"],"action":r["action"],"target":r["target"],"type":r["type"],"time":r["time"],"icon":r["icon"],"created":r["created"]} for r in rows])
 
