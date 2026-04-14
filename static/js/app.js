@@ -150,17 +150,43 @@ async function refreshAll(opts={}){
 }
 
 // ── BOOT ──────────────────────────────────────────
+function hideLoading(){
+  const el = document.getElementById("tf-loading");
+  if(el){
+    el.style.transition = "opacity .25s";
+    el.style.opacity = "0";
+    setTimeout(()=>{ if(el.parentNode) el.parentNode.removeChild(el); }, 280);
+  }
+}
+
+function setLoadingMsg(msg){
+  const el = document.getElementById("tf-loading-msg");
+  if(el) el.textContent = msg;
+}
+
 function forceLogin(){
+  hideLoading();
   const ls = document.getElementById("login-screen");
   const ap = document.getElementById("app");
-  if(ls){ ls.classList.remove("hidden"); ls.style.cssText="display:flex!important"; }
-  if(ap){ ap.classList.remove("visible"); ap.style.cssText="display:none!important"; }
+  if(ls){
+    ls.classList.remove("hidden");
+    ls.style.setProperty("display","flex","important");
+    ls.style.setProperty("visibility","visible","important");
+    ls.style.setProperty("opacity","1","important");
+  }
+  if(ap){
+    ap.classList.remove("visible");
+    ap.style.setProperty("display","none","important");
+    ap.style.setProperty("visibility","hidden","important");
+  }
+  if(window.__tfSafetyTimer){ clearTimeout(window.__tfSafetyTimer); window.__tfSafetyTimer=null; }
 }
 
 window.addEventListener("DOMContentLoaded", async () => {
   // STEP 1: login visível IMEDIATAMENTE — nunca ecrã preto
   forceLogin();
 
+  setLoadingMsg("A verificar sessão...");
   // STEP 2: config com timeout curto
   let cfg = {};
   try {
@@ -178,6 +204,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   const hasToken = new URLSearchParams(window.location.search).get("token");
   if(hasToken){ checkInviteToken(); return; }
 
+  setLoadingMsg("A restaurar sessão...");
   // STEP 4: restaurar sessão
   if(!localStorage.getItem("tf_u")){ forceLogin(); return; }
 
@@ -410,10 +437,21 @@ async function doLogout(){
 function showErr(id,msg){ const e=document.getElementById(id); e.textContent="⚠ "+msg; e.classList.remove("hidden"); setTimeout(()=>e.classList.add("hidden"),4500); }
 
 function showApp(){
+  hideLoading();
   const ls=document.getElementById("login-screen");
   const ap=document.getElementById("app");
-  if(ls){ ls.classList.add("hidden"); ls.style.cssText="display:none!important"; }
-  if(ap){ ap.classList.add("visible"); ap.style.cssText="display:flex!important"; }
+  if(ls){
+    ls.classList.add("hidden");
+    ls.style.setProperty("display","none","important");
+    ls.style.setProperty("visibility","hidden","important");
+  }
+  if(ap){
+    ap.classList.add("visible");
+    ap.style.setProperty("display","flex","important");
+    ap.style.setProperty("visibility","visible","important");
+    ap.style.setProperty("opacity","1","important");
+  }
+  if(window.__tfSafetyTimer){ clearTimeout(window.__tfSafetyTimer); window.__tfSafetyTimer=null; }
   document.querySelectorAll(".view").forEach(v=>v.classList.add("hidden"));
   document.getElementById("v-dashboard").classList.remove("hidden");
   const aiPanel = document.getElementById("ai-panel");
