@@ -139,8 +139,8 @@ const api = async (url, m="GET", b=null, timeoutMs=15000) => {
       localStorage.removeItem("tf_u");
       localStorage.removeItem("tf_creds");
       S.user = null;
-      const _ap=document.getElementById("app"); if(_ap){_ap.classList.remove("visible");_ap.style.cssText="display:none!important";}
-      const _ls=document.getElementById("login-screen"); if(_ls){_ls.classList.remove("hidden");_ls.style.cssText="display:flex!important";}
+      const _ap=document.getElementById("app"); if(_ap){_ap.classList.remove("visible");_ap.removeAttribute("style");}
+      const _ls=document.getElementById("login-screen"); if(_ls){_ls.classList.remove("hidden");_ls.removeAttribute("style");}
       toast("A sessão expirou. Faz login novamente.","w");
       return {error:"Sessão expirada."};
     }
@@ -185,20 +185,11 @@ function setLoadingMsg(msg){
 }
 
 function forceLogin(){
-  hideLoading();
+  try{ hideLoading(); }catch(e){}
   const ls = document.getElementById("login-screen");
   const ap = document.getElementById("app");
-  if(ls){
-    ls.classList.remove("hidden");
-    ls.style.setProperty("display","flex","important");
-    ls.style.setProperty("visibility","visible","important");
-    ls.style.setProperty("opacity","1","important");
-  }
-  if(ap){
-    ap.classList.remove("visible");
-    ap.style.setProperty("display","none","important");
-    ap.style.setProperty("visibility","hidden","important");
-  }
+  if(ls){ ls.classList.remove("hidden"); ls.removeAttribute("style"); }
+  if(ap){ ap.classList.remove("visible"); ap.removeAttribute("style"); }
   if(window.__tfSafetyTimer){ clearTimeout(window.__tfSafetyTimer); window.__tfSafetyTimer=null; }
 }
 
@@ -449,28 +440,19 @@ async function resendCode(){
 async function doLogout(){
   await api("/api/auth/logout","POST");
   localStorage.removeItem("tf_u"); S.user=null;
-  const _ap2=document.getElementById("app"); if(_ap2){_ap2.classList.remove("visible");_ap2.style.cssText="display:none!important";}
-  const _ls2=document.getElementById("login-screen"); if(_ls2){_ls2.classList.remove("hidden");_ls2.style.cssText="display:flex!important";}
+  const _ap2=document.getElementById("app"); if(_ap2){_ap2.classList.remove("visible");_ap2.removeAttribute("style");}
+  const _ls2=document.getElementById("login-screen"); if(_ls2){_ls2.classList.remove("hidden");_ls2.removeAttribute("style");}
   toast("Sessão terminada","i");
 }
 
 function showErr(id,msg){ const e=document.getElementById(id); e.textContent="⚠ "+msg; e.classList.remove("hidden"); setTimeout(()=>e.classList.add("hidden"),4500); }
 
 function showApp(){
-  hideLoading();
+  try{ hideLoading(); }catch(e){}
   const ls=document.getElementById("login-screen");
   const ap=document.getElementById("app");
-  if(ls){
-    ls.classList.add("hidden");
-    ls.style.setProperty("display","none","important");
-    ls.style.setProperty("visibility","hidden","important");
-  }
-  if(ap){
-    ap.classList.add("visible");
-    ap.style.setProperty("display","flex","important");
-    ap.style.setProperty("visibility","visible","important");
-    ap.style.setProperty("opacity","1","important");
-  }
+  if(ls){ ls.classList.add("hidden"); ls.removeAttribute("style"); }
+  if(ap){ ap.classList.add("visible"); ap.removeAttribute("style"); }
   if(window.__tfSafetyTimer){ clearTimeout(window.__tfSafetyTimer); window.__tfSafetyTimer=null; }
   document.querySelectorAll(".view").forEach(v=>v.classList.add("hidden"));
   document.getElementById("v-dashboard").classList.remove("hidden");
