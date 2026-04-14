@@ -27,14 +27,22 @@
   --ok:  #22c55e;
   --war: #f59e0b;
   --err: #ef4444;
-  --font: 'Inter', system-ui, sans-serif;
-  --mono: 'JetBrains Mono', monospace;
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --mono: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
   --r:  12px;
   --rs: 8px;
   --sb: 224px;
   --shadow: 0 8px 32px rgba(0,0,0,.5), 0 0 0 1px rgba(139,92,246,.08);
   --grad: linear-gradient(135deg, #6366f1, #a78bfa);
 }
+/* ── Mobile crítico — previne ecrã preto ── */
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html { -webkit-text-size-adjust: 100%; }
+body { min-height: 100vh; min-height: -webkit-fill-available; }
+#login-screen { min-height: 100vh; min-height: -webkit-fill-available; }
+#app { min-height: 100vh; }
+img { max-width: 100%; }
+
 
 /* ── LIGHT MODE — Purple tint ─────────── */
 [data-theme="light"] {
