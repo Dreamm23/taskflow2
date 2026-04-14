@@ -442,10 +442,23 @@ def send_mention_email(user, mentioned_by, task_title, comment_text):
         print(f"[EMAIL MENTION] Erro: {e}")
 
 # ═══════════════ ROUTES ═══════════════
+# Cache busting — força o browser a buscar JS/CSS novos após deploy
+import hashlib as _hashlib
+
+def _file_hash(path):
+    try:
+        with open(path, "rb") as f:
+            return _hashlib.md5(f.read()).hexdigest()[:8]
+    except:
+        return "v1"
+
 @app.route("/")
 def index():
     try:
-        return render_template("index.html")
+        _base = os.path.dirname(os.path.abspath(__file__))
+        _js_v  = _file_hash(os.path.join(_base, "static", "js", "app.js"))
+        _css_v = _file_hash(os.path.join(_base, "static", "css", "style.css"))
+        return render_template("index.html", js_v=_js_v, css_v=_css_v)
     except Exception as e:
         # Fallback HTML inline se templates não forem encontrados
         import sys

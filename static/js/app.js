@@ -139,7 +139,7 @@ const api = async (url, m="GET", b=null, timeoutMs=15000) => {
       localStorage.removeItem("tf_u");
       localStorage.removeItem("tf_creds");
       S.user = null;
-      const _ap=document.getElementById("app"); if(_ap){_ap.classList.remove("visible");_ap.removeAttribute("style");}
+      const _ap=document.getElementById("app"); if(_ap){_ap.classList.remove("visible");_ap.classList.remove("hidden");_ap.removeAttribute("style");}
       const _ls=document.getElementById("login-screen"); if(_ls){_ls.classList.remove("hidden");_ls.removeAttribute("style");}
       toast("A sessão expirou. Faz login novamente.","w");
       return {error:"Sessão expirada."};
@@ -189,7 +189,11 @@ function forceLogin(){
   const ls = document.getElementById("login-screen");
   const ap = document.getElementById("app");
   if(ls){ ls.classList.remove("hidden"); ls.removeAttribute("style"); }
-  if(ap){ ap.classList.remove("visible"); ap.removeAttribute("style"); }
+  if(ap){
+    ap.classList.remove("visible");
+    ap.classList.remove("hidden"); // nunca esconder com hidden — só não ter visible
+    ap.removeAttribute("style");
+  }
   if(window.__tfSafetyTimer){ clearTimeout(window.__tfSafetyTimer); window.__tfSafetyTimer=null; }
 }
 
@@ -440,7 +444,7 @@ async function resendCode(){
 async function doLogout(){
   await api("/api/auth/logout","POST");
   localStorage.removeItem("tf_u"); S.user=null;
-  const _ap2=document.getElementById("app"); if(_ap2){_ap2.classList.remove("visible");_ap2.removeAttribute("style");}
+  const _ap2=document.getElementById("app"); if(_ap2){_ap2.classList.remove("visible");_ap2.classList.remove("hidden");_ap2.removeAttribute("style");}
   const _ls2=document.getElementById("login-screen"); if(_ls2){_ls2.classList.remove("hidden");_ls2.removeAttribute("style");}
   toast("Sessão terminada","i");
 }
@@ -452,7 +456,11 @@ function showApp(){
   const ls=document.getElementById("login-screen");
   const ap=document.getElementById("app");
   if(ls){ ls.classList.add("hidden"); ls.removeAttribute("style"); }
-  if(ap){ ap.classList.add("visible"); ap.removeAttribute("style"); }
+  if(ap){
+    ap.classList.remove("hidden"); // CRÍTICO: remover hidden antes de adicionar visible
+    ap.classList.add("visible");
+    ap.removeAttribute("style");
+  }
   if(window.__tfSafetyTimer){ clearTimeout(window.__tfSafetyTimer); window.__tfSafetyTimer=null; }
   document.querySelectorAll(".view").forEach(v=>v.classList.add("hidden"));
   document.getElementById("v-dashboard").classList.remove("hidden");
