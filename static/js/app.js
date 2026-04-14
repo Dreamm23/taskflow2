@@ -85,6 +85,26 @@ const S = {
 };
 let chatPollInterval = null;
 
+// ── GLOBAL ERROR HANDLER — nunca ecrã preto por erro JS ──
+window.addEventListener("error", function(e){
+  console.error("[TaskFlow global error]", e.message, e.filename, e.lineno);
+  // Se o app ainda não foi mostrado e o login está escondido, forçar login
+  const ap = document.getElementById("app");
+  const ls = document.getElementById("login-screen");
+  if(ap && ls){
+    const apVisible = ap.classList.contains("visible") || ap.style.display === "flex";
+    const lsVisible = !ls.classList.contains("hidden") && ls.style.display !== "none";
+    if(!apVisible && !lsVisible){
+      // Tudo escondido = ecrã preto — forçar login
+      ls.style.setProperty("display","flex","important");
+      ls.classList.remove("hidden");
+    }
+  }
+});
+window.addEventListener("unhandledrejection", function(e){
+  console.error("[TaskFlow unhandled promise]", e.reason);
+});
+
 // ── API ────────────────────────────────────────────
 const api = async (url, m="GET", b=null, timeoutMs=15000) => {
   const o={method:m,headers:{"Content-Type":"application/json"}};
@@ -331,8 +351,8 @@ async function checkNotifs(){
     if(!Array.isArray(n)) return;
     S.notifs = n;
     updateNotifBadge();
-  } catch(e) {}
-  renderNotifList(n);
+    renderNotifList(n);
+  } catch(e) { console.warn("[checkNotifs]", e); }
 }
 
 function updateAIStatus(){
@@ -3233,7 +3253,9 @@ function toggleNotif(){ document.getElementById("notif-panel").classList.toggle(
 function closeNotif(){ document.getElementById("notif-panel").classList.add("hidden"); document.getElementById("notif-overlay").classList.add("hidden"); }
 
 function renderNotifList(notifs){
+  notifs = Array.isArray(notifs) ? notifs : (S.notifs||[]);
   const el=document.getElementById("notif-list");
+  if(!el) return;
   if(!notifs.length){el.innerHTML=`<div class="empty-st" style="padding:24px"><div class="empty-i" style="font-size:26px">🔔</div><div class="empty-t">Sem notificações</div></div>`;return;}
   el.innerHTML=notifs.map(n=>`<div class="nitem ${!n.read?"unread":""}">
     <div class="nitem-ico">${{task:"📋",comment:"💬",deadline:"⏰",mention:"@"}[n.type]||"🔔"}</div>
