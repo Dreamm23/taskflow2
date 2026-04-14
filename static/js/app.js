@@ -818,7 +818,7 @@ function renderSBProjs(){
         <span style="flex:1;text-decoration:line-through;overflow:hidden;text-overflow:ellipsis">${p.name}</span>
         ${can?`<span onclick="archiveProject('${p.id}')" style="cursor:pointer;font-size:10px;color:var(--a3);padding:2px 5px" title="Reativar">↩</span>`:""}
       </div>`).join(""):"")
-    +(can?`<div class="sb-proj-row" onclick="openNewProj()" style="color:var(--t3)"><span style="font-size:14px">+</span><span>Novo projeto</span></div>`:"");
+    +(can?`<div class="sb-proj-row" onclick="openProjectTemplates()" style="color:var(--t3)"><span style="font-size:14px">+</span><span>Novo projeto</span></div>`:"");
   el.querySelectorAll(".proj-cfg-btn").forEach(btn=>{
     const row=btn.closest(".sb-proj-row");
     row.addEventListener("mouseenter",()=>btn.style.opacity="1");
@@ -829,7 +829,7 @@ function renderSBProjs(){
 function filterProj(pid){ S.search="proj:"+pid; nav("kanban"); }
 
 // ── NAV ───────────────────────────────────────────
-const VTITLES={dashboard:"Dashboard",kanban:"Kanban",calendar:"Calendário",notes:"Notas",team:"Equipa",reports:"Relatórios",settings:"Definições",chat:"Chat"};
+const VTITLES={dashboard:"Dashboard",kanban:"Kanban",calendar:"Calendário",notes:"Notas",team:"Equipa",reports:"Relatórios",gantt:"Timeline",automations:"Automações",settings:"Definições",chat:"Chat"};
 
 function nav(v){
   S.view=v;
@@ -861,6 +861,8 @@ function render(v){
   else if(v==="notes")renderNotes();
   else if(v==="team")renderTeam();
   else if(v==="reports")renderReports();
+  else if(v==="gantt")renderGantt();
+  else if(v==="automations")renderAutomations();
   else if(v==="chat")renderChat();
   else if(v==="settings")renderSettings();
 }
@@ -1026,7 +1028,7 @@ function renderDash(){
     projects: {
       label:"📁 Projetos", html:`
       <div class="card" style="margin-bottom:4px">
-        <div class="shd"><div class="stitle">Projetos</div>${S.user?.role==="admin"||S.user?.role==="manager"?`<button class="btn-ghost" style="padding:5px 12px;font-size:12px" onclick="openNewProj()">+ Novo</button>`:""}</div>
+        <div class="shd"><div class="stitle">Projetos</div>${S.user?.role==="admin"||S.user?.role==="manager"?`<button class="btn-ghost" style="padding:5px 12px;font-size:12px" onclick="openProjectTemplates()">+ Novo</button>`:""}</div>
         ${projR||`<div class="empty-st" style="padding:16px"><div class="empty-t">Sem projetos ativos</div></div>`}
       </div>`
     },
@@ -1425,9 +1427,17 @@ function renderKanban(){
               <div style="position:absolute;left:0;top:0;bottom:0;width:2.5px;background:${PRIO[t.priority]?.c};border-radius:8px 0 0 8px"></div>
               ${t.pinned?`<div style="position:absolute;top:7px;right:8px;font-size:10px" title="Fixada">📌</div>`:""}
               ${isTaskBlocked(t)?`<div style="font-size:10px;color:var(--err);font-weight:700;margin-bottom:3px;display:flex;align-items:center;gap:3px"><span>🔒</span><span>Bloqueada por ${getBlockedBy(t).length} tarefa${getBlockedBy(t).length>1?"s":""}</span></div>`:""}
-              <div class="tc-title">${t.title}</div>
+              <div class="tc-title">${t.title}${t.recurrence?` <span style="font-size:9px;color:var(--a3);opacity:.8" title="Tarefa recorrente">🔁</span>`:""}</div>
               ${t.tags?.length?`<div class="tc-tags">${t.tags.map(tg=>{const g=TAGS.find(x=>x.id===tg);return g?`<span class="tag" style="background:${g.c}18;color:${g.c}">${g.l}</span>`:""}).join("")}</div>`:""}
-              ${t.subtasks?.length?`<div class="tc-sub">☑ ${ds}/${t.subtasks.length}</div>`:""}
+              ${t.subtasks?.length?`<div style="margin:5px 0 3px">
+  <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+    <span style="font-size:9.5px;color:var(--t3)">☑ ${ds}/${t.subtasks.length} subtarefas</span>
+    <span style="font-size:9.5px;color:var(--t3);font-weight:700">${Math.round(ds/t.subtasks.length*100)}%</span>
+  </div>
+  <div style="height:3px;background:var(--bg4);border-radius:2px;overflow:hidden">
+    <div style="height:100%;width:${t.subtasks.length?ds/t.subtasks.length*100:0}%;background:${ds===t.subtasks.length?"var(--ok)":"var(--a)"};border-radius:2px;transition:width .3s"></div>
+  </div>
+</div>`:""}
               <div class="tc-meta">
                 <div class="pri" style="background:${PRIO[t.priority]?.bg};color:${PRIO[t.priority]?.c}">${PRIO[t.priority]?.l}</div>
                 ${proj?`<span style="font-size:9px;padding:2px 6px;background:${proj.color}18;color:${proj.color};border-radius:4px;font-weight:700">${proj.icon}</span>`:""}
@@ -2638,6 +2648,13 @@ async function saveGCID(){
 // ─────────────────────────────────────────────────
 //  TASK MODAIS
 // ─────────────────────────────────────────────────
+
+function toggleRecurEnd(){
+  const v = document.getElementById("mt-recur")?.value;
+  const wrap = document.getElementById("mt-recur-end-wrap");
+  if(wrap) wrap.style.display = v ? "block" : "none";
+}
+
 function openNewTask(){ openNewTaskStatus("A Fazer"); }
 function openNewTaskStatus(status){
   S.newStatus=status; S.newSubs=[];
@@ -2646,6 +2663,12 @@ function openNewTaskStatus(status){
   document.getElementById("mt-status").value=status;
   document.getElementById("mt-prio").value="medium";
   document.getElementById("mt-dl").value="";
+  const recurEl = document.getElementById("mt-recur");
+  const recurEndEl = document.getElementById("mt-recur-end");
+  const recurEndWrap = document.getElementById("mt-recur-end-wrap");
+  if(recurEl) recurEl.value="";
+  if(recurEndEl) recurEndEl.value="";
+  if(recurEndWrap) recurEndWrap.style.display="none";
   document.getElementById("mt-asgn").innerHTML=S.users.map(u=>`<option value="${u.id}">${u.name}</option>`).join("");
   document.getElementById("mt-proj").innerHTML=`<option value="">Nenhum</option>`+S.projects.map(p=>`<option value="${p.id}">${p.icon} ${p.name}</option>`).join("");
   document.getElementById("mt-tags").innerHTML=TAGS.map(t=>`<div class="topt" style="background:${t.c}18;color:${t.c}" data-id="${t.id}" onclick="this.classList.toggle('on')">${t.l}</div>`).join("");
@@ -2661,10 +2684,16 @@ async function submitTask(){
   const title=document.getElementById("mt-title").value.trim();
   if(!title){toast("Título obrigatório!","e");return;}
   const tags=[...document.querySelectorAll("#mt-tags .topt.on")].map(el=>el.dataset.id);
-  const t={title,description:document.getElementById("mt-desc").value,status:document.getElementById("mt-status").value,priority:document.getElementById("mt-prio").value,assignee:document.getElementById("mt-asgn").value,deadline:document.getElementById("mt-dl").value,project:document.getElementById("mt-proj").value,tags,subtasks:S.newSubs};
+  const recur = document.getElementById("mt-recur").value;
+  const recurEnd = document.getElementById("mt-recur-end").value;
+  const t={title,description:document.getElementById("mt-desc").value,status:document.getElementById("mt-status").value,priority:document.getElementById("mt-prio").value,assignee:document.getElementById("mt-asgn").value,deadline:document.getElementById("mt-dl").value,project:document.getElementById("mt-proj").value,tags,subtasks:S.newSubs,recurrence:recur||null,recurrenceEnd:recurEnd||null};
   const r=await api("/api/tasks","POST",t);
   if(r.error){toast(r.error,"e");return;}
-  closeMo("mo-task"); toast(`"${r.title}" criada! ✨`,"s");
+  closeMo("mo-task");
+  if(recur) toast(`"${r.title}" criada com repetição ${recur==="daily"?"diária":recur==="weekly"?"semanal":recur==="biweekly"?"quinzenal":"mensal"}! 🔁`,"s");
+  else toast(`"${r.title}" criada! ✨`,"s");
+  S.tasks.push(r);
+  runAutomations("task_created", r);
   await refreshAll();
   setTimeout(async()=>{ S.notifs = await api("/api/notifications")||[]; updateNotifBadge(); }, 500);
 }
@@ -2793,6 +2822,199 @@ async function submitEvent(){
 // ─────────────────────────────────────────────────
 //  PROJECT MODAL
 // ─────────────────────────────────────────────────
+
+// ═══════════════════════════════════════════════════════
+//  TEMPLATES DE PROJETOS
+// ═══════════════════════════════════════════════════════
+const PROJECT_TEMPLATES = [
+  {
+    id:"sprint", name:"Sprint de Desenvolvimento", icon:"⚡", color:"#6366f1",
+    description:"Template para sprints de desenvolvimento ágil com tarefas típicas",
+    tasks:[
+      {title:"Planeamento do sprint", status:"A Fazer", priority:"high"},
+      {title:"Setup do ambiente de desenvolvimento", status:"A Fazer", priority:"medium"},
+      {title:"Implementar funcionalidades do backlog", status:"A Fazer", priority:"high"},
+      {title:"Revisão de código (code review)", status:"A Fazer", priority:"medium"},
+      {title:"Testes e QA", status:"A Fazer", priority:"high"},
+      {title:"Deploy para staging", status:"A Fazer", priority:"medium"},
+      {title:"Retrospetiva do sprint", status:"A Fazer", priority:"low"},
+    ]
+  },
+  {
+    id:"marketing", name:"Campanha de Marketing", icon:"📣", color:"#ec4899",
+    description:"Template para planear e executar campanhas de marketing",
+    tasks:[
+      {title:"Definir objetivos e KPIs da campanha", status:"A Fazer", priority:"high"},
+      {title:"Pesquisa de mercado e público-alvo", status:"A Fazer", priority:"high"},
+      {title:"Criar conteúdo para redes sociais", status:"A Fazer", priority:"medium"},
+      {title:"Design de materiais gráficos", status:"A Fazer", priority:"medium"},
+      {title:"Configurar anúncios pagos (Google/Meta)", status:"A Fazer", priority:"medium"},
+      {title:"Enviar newsletter para lista de emails", status:"A Fazer", priority:"low"},
+      {title:"Analisar resultados e relatório final", status:"A Fazer", priority:"high"},
+    ]
+  },
+  {
+    id:"website", name:"Lançamento de Website", icon:"🌐", color:"#10b981",
+    description:"Template para criar e lançar um website do zero",
+    tasks:[
+      {title:"Definir requisitos e sitemap", status:"A Fazer", priority:"high"},
+      {title:"Design wireframes e mockups", status:"A Fazer", priority:"high"},
+      {title:"Desenvolvimento frontend", status:"A Fazer", priority:"high"},
+      {title:"Desenvolvimento backend e API", status:"A Fazer", priority:"high"},
+      {title:"Configurar domínio e hosting", status:"A Fazer", priority:"medium"},
+      {title:"Testes cross-browser e responsivo", status:"A Fazer", priority:"high"},
+      {title:"SEO e otimização de performance", status:"A Fazer", priority:"medium"},
+      {title:"Lançamento e monitorização", status:"A Fazer", priority:"high"},
+    ]
+  },
+  {
+    id:"onboarding", name:"Onboarding de Colaborador", icon:"👋", color:"#f59e0b",
+    description:"Template para integrar um novo membro na equipa",
+    tasks:[
+      {title:"Preparar equipamento e acessos", status:"A Fazer", priority:"high"},
+      {title:"Apresentação à equipa", status:"A Fazer", priority:"medium"},
+      {title:"Formação sobre ferramentas internas", status:"A Fazer", priority:"high"},
+      {title:"Revisão de processos e documentação", status:"A Fazer", priority:"medium"},
+      {title:"Primeira tarefa de projeto real", status:"A Fazer", priority:"medium"},
+      {title:"Check-in de 1 semana", status:"A Fazer", priority:"low"},
+      {title:"Reunião de feedback ao fim do mês", status:"A Fazer", priority:"low"},
+    ]
+  },
+  {
+    id:"event", name:"Organização de Evento", icon:"🎉", color:"#8b5cf6",
+    description:"Template para planear e organizar eventos",
+    tasks:[
+      {title:"Definir data, local e orçamento", status:"A Fazer", priority:"high"},
+      {title:"Criar lista de convidados", status:"A Fazer", priority:"medium"},
+      {title:"Enviar convites", status:"A Fazer", priority:"high"},
+      {title:"Contratar fornecedores (catering, som, etc)", status:"A Fazer", priority:"medium"},
+      {title:"Criar programa do evento", status:"A Fazer", priority:"medium"},
+      {title:"Confirmação de presenças", status:"A Fazer", priority:"medium"},
+      {title:"Preparação no dia do evento", status:"A Fazer", priority:"high"},
+      {title:"Follow-up pós-evento", status:"A Fazer", priority:"low"},
+    ]
+  },
+  {
+    id:"bugfix", name:"Correção de Bugs", icon:"🐛", color:"#ef4444",
+    description:"Template para gerir e resolver bugs de software",
+    tasks:[
+      {title:"Triagem e categorização de bugs reportados", status:"A Fazer", priority:"high"},
+      {title:"Reproduzir e documentar bugs críticos", status:"A Fazer", priority:"high"},
+      {title:"Corrigir bugs de alta prioridade", status:"A Fazer", priority:"high"},
+      {title:"Corrigir bugs de média prioridade", status:"A Fazer", priority:"medium"},
+      {title:"Escrever testes para os bugs corrigidos", status:"A Fazer", priority:"medium"},
+      {title:"Code review das correções", status:"A Fazer", priority:"medium"},
+      {title:"Deploy do patch de correção", status:"A Fazer", priority:"high"},
+    ]
+  },
+];
+
+function openProjectTemplates(){
+  const mo = document.createElement("div");
+  mo.className = "mo";
+  mo.innerHTML = `
+  <div class="modal" style="max-width:640px" onclick="event.stopPropagation()">
+    <div class="mhd">
+      <h3>📋 Templates de Projeto</h3>
+      <button onclick="this.closest('.mo').remove()">✕</button>
+    </div>
+    <div class="mbody">
+      <div style="font-size:12.5px;color:var(--t3);margin-bottom:16px">Começa rapidamente com um template pronto. As tarefas serão criadas automaticamente.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        ${PROJECT_TEMPLATES.map(t=>`
+        <div onclick="selectProjectTemplate('${t.id}')" style="background:var(--bg3);border:1.5px solid var(--b1);border-radius:14px;padding:16px;cursor:pointer;transition:all .15s" onmouseenter="this.style.borderColor='${t.color}';this.style.background='var(--bg2)'" onmouseleave="this.style.borderColor='var(--b1)';this.style.background='var(--bg3)'">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+            <div style="width:36px;height:36px;border-radius:10px;background:${t.color}18;display:flex;align-items:center;justify-content:center;font-size:18px">${t.icon}</div>
+            <div>
+              <div style="font-size:13px;font-weight:700;color:var(--t)">${t.name}</div>
+              <div style="font-size:10.5px;color:var(--t3)">${t.tasks.length} tarefas incluídas</div>
+            </div>
+          </div>
+          <div style="font-size:11.5px;color:var(--t3);line-height:1.4">${t.description}</div>
+        </div>`).join("")}
+      </div>
+    </div>
+    <div class="mfoot">
+      <button class="btn-ghost" onclick="this.closest('.mo').remove()">Cancelar</button>
+      <button class="btn-cta" onclick="openNewProj()">+ Criar projeto em branco</button>
+    </div>
+  </div>`;
+  mo.onclick = e=>{ if(e.target===mo) mo.remove(); };
+  document.body.appendChild(mo);
+}
+
+function selectProjectTemplate(tid){
+  const tmpl = PROJECT_TEMPLATES.find(t=>t.id===tid);
+  if(!tmpl) return;
+  // Fechar modal de templates
+  document.querySelectorAll(".mo").forEach(m=>m.remove());
+  // Abrir modal de projeto com dados preenchidos
+  S.selColor = tmpl.color;
+  S.pendingTemplate = tmpl;
+  const mo = document.createElement("div");
+  mo.className = "mo";
+  mo.innerHTML = `
+  <div class="modal" style="max-width:420px" onclick="event.stopPropagation()">
+    <div class="mhd"><h3>${tmpl.icon} Criar projeto com template</h3><button onclick="this.closest('.mo').remove()">✕</button></div>
+    <div class="mbody" style="display:flex;flex-direction:column;gap:12px">
+      <div class="fg"><label>Nome do projeto *</label><input class="fi" id="tmpl-name" placeholder="${tmpl.name}" value="${tmpl.name}"/></div>
+      <div class="fg"><label>Ícone</label><input class="fi" id="tmpl-icon" value="${tmpl.icon}" style="width:80px;font-size:18px;text-align:center" maxlength="2"/></div>
+      <div style="background:var(--bg3);border-radius:10px;padding:12px">
+        <div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Tarefas a criar (${tmpl.tasks.length})</div>
+        ${tmpl.tasks.map(t=>`<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;color:var(--t2)">
+          <div style="width:6px;height:6px;border-radius:50%;background:${t.priority==="high"?"var(--err)":t.priority==="medium"?"var(--war)":"var(--ok)"};flex-shrink:0"></div>
+          ${t.title}
+        </div>`).join("")}
+      </div>
+    </div>
+    <div class="mfoot">
+      <button class="btn-ghost" onclick="this.closest('.mo').remove()">Cancelar</button>
+      <button class="btn-cta" onclick="createProjectFromTemplate()">🚀 Criar projeto</button>
+    </div>
+  </div>`;
+  mo.onclick = e=>{ if(e.target===mo) mo.remove(); };
+  document.body.appendChild(mo);
+  setTimeout(()=>document.getElementById("tmpl-name")?.focus(), 100);
+}
+
+async function createProjectFromTemplate(){
+  const name = document.getElementById("tmpl-name")?.value.trim();
+  const icon = document.getElementById("tmpl-icon")?.value || S.pendingTemplate?.icon;
+  const tmpl = S.pendingTemplate;
+  if(!name){ toast("Nome obrigatório","w"); return; }
+  if(!tmpl) return;
+
+  const btn = document.querySelector(".mo .btn-cta");
+  if(btn){ btn.disabled=true; btn.textContent="A criar..."; }
+
+  // Criar projeto
+  const proj = await api("/api/projects","POST",{
+    name, icon, color: tmpl.color,
+    description: tmpl.description
+  });
+  if(proj.error){ toast(proj.error,"e"); if(btn){btn.disabled=false;btn.textContent="🚀 Criar projeto";} return; }
+  S.projects.push(proj);
+
+  // Criar tarefas do template
+  let created = 0;
+  for(const t of tmpl.tasks){
+    const r = await api("/api/tasks","POST",{
+      title: t.title,
+      status: t.status,
+      priority: t.priority,
+      project: proj.id,
+    });
+    if(!r.error){ S.tasks.push(r); created++; }
+  }
+
+  document.querySelectorAll(".mo").forEach(m=>m.remove());
+  toast(`✅ Projeto "${name}" criado com ${created} tarefas!`,"s");
+  S.pendingTemplate = null;
+  renderSBProjs();
+  nav("kanban");
+  setTimeout(()=>{ filterProj(proj.id); }, 100);
+}
+
 function openNewProj(){
   const mo = document.getElementById("mo-proj");
   if(!mo){ toast("Erro ao abrir modal de projeto","e"); return; }
@@ -3192,6 +3414,8 @@ async function quickComplete(tid){
   const newStatus = t.status === "Concluído" ? "A Fazer" : "Concluído";
   const r = await api(`/api/tasks/${tid}`,"PATCH",{status: newStatus});
   if(!r.error){
+    t.status = newStatus;
+    if(newStatus === "Concluído") runAutomations("task_completed", t);
     toast(newStatus === "Concluído" ? "✅ Tarefa concluída!" : "↩️ Tarefa reaberta", "s");
     await refreshAll();
   }
@@ -3860,6 +4084,262 @@ function renderHistory(){
 // ═══════════════════════════════════════════════
 //  CHAT INTERNO
 // ═══════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════
+//  TIMELINE / GANTT
+// ═══════════════════════════════════════════════════════════════
+function renderGantt(){
+  const el = document.getElementById("v-gantt");
+  if(!el) return;
+  const tasks = S.tasks.filter(t=>t.deadline);
+  const projects = S.projects.filter(p=>p.status!=="archived");
+  const now = new Date();
+  const dates = tasks.map(t=>new Date(t.deadline)).filter(d=>!isNaN(d));
+  const minDate = dates.length ? new Date(Math.min(...dates.map(d=>d.getTime()), now.getTime())) : new Date(now);
+  const maxDate = dates.length ? new Date(Math.max(...dates.map(d=>d.getTime()), now.getTime())) : new Date(now.getTime()+30*86400000);
+  minDate.setDate(minDate.getDate()-7);
+  maxDate.setDate(maxDate.getDate()+7);
+  const totalDays = Math.ceil((maxDate-minDate)/86400000);
+  const dayW = Math.max(28, Math.floor(860/totalDays));
+  const months = {};
+  const dayHeaders = [];
+  for(let i=0;i<totalDays;i++){
+    const d = new Date(minDate.getTime()+i*86400000);
+    const key = d.getFullYear()+"-"+d.getMonth();
+    if(!months[key]) months[key]={label:d.toLocaleDateString("pt-PT",{month:"short",year:"numeric"}),count:0};
+    months[key].count++;
+    const isToday = d.toISOString().slice(0,10)===now.toISOString().slice(0,10);
+    const isWE = d.getDay()===0||d.getDay()===6;
+    dayHeaders.push(`<div style="width:${dayW}px;flex-shrink:0;text-align:center;font-size:9px;color:${isToday?"var(--a)":"var(--t3)"};font-weight:${isToday?"700":"400"};border-right:1px solid var(--b1);padding:3px 0;background:${isWE?"rgba(0,0,0,.05)":"transparent"}">${d.getDate()}</div>`);
+  }
+  const todayOff = Math.floor((now-minDate)/86400000);
+  const todayLine = todayOff>=0&&todayOff<totalDays ? `<div style="position:absolute;left:${todayOff*dayW}px;top:0;width:2px;height:100%;background:var(--a);z-index:2"></div>` : "";
+  const bgGrid = (h) => Array.from({length:totalDays},(_,i)=>{
+    const d=new Date(minDate.getTime()+i*86400000);
+    const isWE=d.getDay()===0||d.getDay()===6;
+    return `<div style="position:absolute;left:${i*dayW}px;top:0;width:${dayW}px;height:${h}px;background:${isWE?"rgba(0,0,0,.04)":"transparent"};border-right:1px solid var(--b1)"></div>`;
+  }).join("");
+  const grouped = {};
+  projects.forEach(p=>{const pt=tasks.filter(t=>t.project===p.id&&t.deadline);if(pt.length)grouped[p.id]={project:p,tasks:pt};});
+  const ung=tasks.filter(t=>!t.project||!projects.find(p=>p.id===t.project));
+  if(ung.length) grouped["_"]={project:{name:"Sem projeto",icon:"📋",color:"#666"},tasks:ung};
+  const rows = Object.values(grouped).map(({project,tasks:pt})=>`
+    <div style="display:flex;align-items:center;padding:6px 0;border-bottom:1px solid var(--b1);background:var(--bg3)">
+      <div style="width:200px;flex-shrink:0;padding:0 12px;display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--t)">${project.icon} ${project.name}</div>
+      <div style="flex:1;position:relative;height:28px">${bgGrid(28)}${todayLine}</div>
+    </div>
+    ${pt.map(t=>{
+      const deadline=new Date(t.deadline);
+      const created=t.created?new Date(t.created):new Date(deadline.getTime()-3*86400000);
+      const s0=Math.max(0,Math.floor((created-minDate)/86400000));
+      const e0=Math.min(totalDays-1,Math.floor((deadline-minDate)/86400000));
+      const w=Math.max(dayW,(e0-s0+1)*dayW);
+      const isDone=t.status==="Concluído";
+      const isOv=!isDone&&t.deadline<now.toISOString().slice(0,10);
+      const barColor=isDone?"var(--ok)":isOv?"var(--err)":project.color||"var(--a)";
+      return `<div style="display:flex;align-items:center;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.03)">
+        <div style="width:200px;flex-shrink:0;padding:0 12px 0 24px;display:flex;align-items:center;gap:6px;overflow:hidden;cursor:pointer" onclick="openDetail('${t.id}')">
+          <div style="width:6px;height:6px;border-radius:50%;background:${barColor};flex-shrink:0"></div>
+          <span style="font-size:11.5px;color:var(--t2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.title}</span>
+        </div>
+        <div style="flex:1;position:relative;height:24px">${bgGrid(24)}${todayLine}
+          <div title="${t.title} — ${t.deadline}" onclick="openDetail('${t.id}')" style="position:absolute;left:${s0*dayW+2}px;top:4px;width:${w-4}px;height:16px;background:${barColor};border-radius:4px;opacity:${isDone?.6:1};cursor:pointer;display:flex;align-items:center;padding:0 6px;z-index:1;box-shadow:0 1px 4px rgba(0,0,0,.2)">
+            <span style="font-size:9px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600">${isDone?"✓ ":""}${t.title}</span>
+          </div>
+        </div>
+      </div>`;
+    }).join("")}`).join("");
+  el.innerHTML = `
+  <div class="shd" style="margin-bottom:16px">
+    <div><div class="stitle">📅 Timeline / Gantt</div><div style="font-size:12px;color:var(--t3);margin-top:2px">${tasks.length} tarefas com prazo</div></div>
+    <div style="display:flex;gap:10px;align-items:center">
+      <div style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--t3)"><div style="width:10px;height:10px;background:var(--ok);border-radius:2px"></div> Concluída</div>
+      <div style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--t3)"><div style="width:10px;height:10px;background:var(--err);border-radius:2px"></div> Atrasada</div>
+      <div style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--t3)"><div style="width:10px;height:10px;background:var(--a);border-radius:2px"></div> Em curso</div>
+      <button class="btn-ghost" style="padding:5px 12px;font-size:12px" onclick="renderGantt()">🔄 Atualizar</button>
+    </div>
+  </div>
+  ${tasks.length===0?`<div class="empty-st"><div class="empty-i">📅</div><div class="empty-t">Sem tarefas com prazo definido</div><div class="empty-s">Adiciona prazos às tarefas para as ver aqui</div></div>`:`
+  <div style="overflow-x:auto;border:1px solid var(--b1);border-radius:14px;background:var(--bg2)">
+    <div style="display:flex;border-bottom:1px solid var(--b1);background:var(--bg3)">
+      <div style="width:200px;flex-shrink:0;padding:6px 12px;font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:1px;border-right:1px solid var(--b1)">Tarefa</div>
+      <div style="display:flex">${Object.values(months).map(m=>`<div style="width:${m.count*dayW}px;flex-shrink:0;padding:5px 8px;font-size:10px;font-weight:700;color:var(--t2);border-right:1px solid var(--b1);text-transform:uppercase;letter-spacing:.5px">${m.label}</div>`).join("")}</div>
+    </div>
+    <div style="display:flex;border-bottom:2px solid var(--b1);background:var(--bg3)">
+      <div style="width:200px;flex-shrink:0;border-right:1px solid var(--b1)"></div>
+      <div style="display:flex">${dayHeaders.join("")}</div>
+    </div>
+    <div>${rows}</div>
+  </div>`}`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  AUTOMAÇÕES
+// ═══════════════════════════════════════════════════════════════
+const AUTOMATION_TRIGGERS = {
+  task_created:   "Quando uma tarefa é criada",
+  task_completed: "Quando uma tarefa é concluída",
+  task_overdue:   "Quando uma tarefa fica em atraso",
+  task_assigned:  "Quando uma tarefa é atribuída",
+  status_changed: "Quando o estado muda",
+};
+const AUTOMATION_ACTIONS = {
+  notify_assignee: "Notificar o responsável",
+  notify_all:      "Notificar toda a equipa",
+  change_status:   "Alterar estado para...",
+  assign_to:       "Atribuir a...",
+  add_tag:         "Adicionar etiqueta...",
+  send_webhook:    "Enviar webhook (Discord/Slack)",
+};
+
+function getAutomations(){ return JSON.parse(localStorage.getItem("tf_automations")||"[]"); }
+function saveAutomations(rules){ localStorage.setItem("tf_automations",JSON.stringify(rules)); updateAutomationBadge(); }
+function updateAutomationBadge(){
+  const n = getAutomations().filter(r=>r.enabled).length;
+  const b = document.getElementById("b-automations");
+  if(b){ b.textContent=n; b.style.display=n?"":"none"; }
+}
+
+function renderAutomations(){
+  const el = document.getElementById("v-automations");
+  if(!el) return;
+  const rules = getAutomations();
+  el.innerHTML = `
+  <div class="shd" style="margin-bottom:20px">
+    <div><div class="stitle">⚡ Automações</div><div style="font-size:12px;color:var(--t3);margin-top:2px">${rules.filter(r=>r.enabled).length} ativas de ${rules.length} regras</div></div>
+    <button class="btn-cta" style="padding:8px 16px;font-size:13px" onclick="openNewAutomation()">+ Nova regra</button>
+  </div>
+  ${rules.length===0?`<div class="empty-st"><div class="empty-i">⚡</div><div class="empty-t">Sem automações criadas</div><div class="empty-s">Automatiza tarefas repetitivas com regras simples</div><button class="btn-cta" style="margin-top:16px;padding:10px 20px" onclick="openNewAutomation()">Criar primeira automação</button></div>`:`
+  <div style="display:flex;flex-direction:column;gap:10px">
+    ${rules.map((r,i)=>`
+    <div style="background:var(--bg2);border:1px solid ${r.enabled?"rgba(99,102,241,.25)":"var(--b1)"};border-radius:14px;padding:16px 20px;display:flex;align-items:center;gap:14px">
+      <div style="width:42px;height:42px;border-radius:12px;background:${r.enabled?"linear-gradient(135deg,var(--a),#a78bfa)":"var(--bg3)"};display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">⚡</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13.5px;font-weight:700;color:var(--t);margin-bottom:3px">${r.name}</div>
+        <div style="font-size:11.5px;color:var(--t3)"><span style="color:var(--a2);font-weight:600">${AUTOMATION_TRIGGERS[r.trigger]||r.trigger}</span><span style="margin:0 6px">→</span><span>${AUTOMATION_ACTIONS[r.action]||r.action}${r.actionValue?" <b>"+r.actionValue+"</b>":""}</span></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+        <span style="font-size:10px;color:var(--t3)">${r.runCount||0}× executado</span>
+        <div onclick="toggleAutomation(${i})" style="width:36px;height:20px;border-radius:10px;background:${r.enabled?"var(--a)":"var(--bg4)"};cursor:pointer;position:relative;transition:background .2s">
+          <div style="position:absolute;top:2px;left:${r.enabled?"18":"2"}px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .2s;box-shadow:0 1px 4px rgba(0,0,0,.3)"></div>
+        </div>
+        <button onclick="editAutomation(${i})" style="background:var(--bg3);border:1px solid var(--b1);border-radius:7px;padding:5px 10px;cursor:pointer;font-size:12px;color:var(--t3)">✏️</button>
+        <button onclick="deleteAutomation(${i})" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);border-radius:7px;padding:5px 10px;cursor:pointer;font-size:12px;color:var(--err)">🗑️</button>
+      </div>
+    </div>`).join("")}
+  </div>`}
+  <div style="margin-top:28px">
+    <div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:1.2px;margin-bottom:12px">💡 Sugestões populares</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      ${[
+        {name:"Notificar quando atrasada",trigger:"task_overdue",action:"notify_assignee",icon:"🚨"},
+        {name:"Notificar equipa ao concluir",trigger:"task_completed",action:"notify_all",icon:"🎉"},
+        {name:"Mover para Em Progresso ao atribuir",trigger:"task_assigned",action:"change_status",actionValue:"Em Progresso",icon:"▶️"},
+        {name:"Webhook Discord ao criar tarefa",trigger:"task_created",action:"send_webhook",icon:"📡"},
+      ].map(s=>`<div onclick="addSuggestedAutomation(${JSON.stringify(s).replace(/"/g,"&quot;")})" style="background:var(--bg3);border:1px solid var(--b1);border-radius:12px;padding:14px;cursor:pointer;transition:border .15s" onmouseenter="this.style.borderColor='var(--a)'" onmouseleave="this.style.borderColor='var(--b1)'">
+        <div style="font-size:20px;margin-bottom:6px">${s.icon}</div>
+        <div style="font-size:12.5px;font-weight:600;color:var(--t)">${s.name}</div>
+        <div style="font-size:11px;color:var(--t3);margin-top:3px">${AUTOMATION_TRIGGERS[s.trigger]} → ${AUTOMATION_ACTIONS[s.action]}</div>
+      </div>`).join("")}
+    </div>
+  </div>`;
+}
+
+function openNewAutomation(rule=null,idx=null){
+  const isEdit=rule!==null;
+  const mo=document.createElement("div"); mo.className="mo";
+  mo.innerHTML=`<div class="modal" style="max-width:480px" onclick="event.stopPropagation()">
+    <div class="mhd"><h3>${isEdit?"✏️ Editar":"⚡ Nova"} Automação</h3><button onclick="this.closest('.mo').remove()">✕</button></div>
+    <div class="mbody" style="display:flex;flex-direction:column;gap:14px">
+      <div class="fg"><label>Nome da regra</label><input class="fi" id="aut-name" placeholder="Ex: Notificar atrasos" value="${isEdit?rule.name:''}"/></div>
+      <div class="fg"><label>Quando (gatilho)</label><select class="fi" id="aut-trigger">${Object.entries(AUTOMATION_TRIGGERS).map(([k,v])=>`<option value="${k}"${isEdit&&rule.trigger===k?" selected":""}>${v}</option>`).join("")}</select></div>
+      <div class="fg"><label>Fazer (ação)</label><select class="fi" id="aut-action" onchange="updateAutomationValueField()">${Object.entries(AUTOMATION_ACTIONS).map(([k,v])=>`<option value="${k}"${isEdit&&rule.action===k?" selected":""}>${v}</option>`).join("")}</select></div>
+      <div class="fg" id="aut-value-wrap" style="display:none"><label id="aut-value-label">Valor</label><input class="fi" id="aut-value" placeholder="" value="${isEdit&&rule.actionValue?rule.actionValue:''}"/></div>
+    </div>
+    <div class="mfoot"><button class="btn-ghost" onclick="this.closest('.mo').remove()">Cancelar</button><button class="btn-cta" onclick="saveAutomationRule(${isEdit?idx:'null'})">💾 Guardar</button></div>
+  </div>`;
+  mo.onclick=e=>{if(e.target===mo)mo.remove();};
+  document.body.appendChild(mo);
+  setTimeout(updateAutomationValueField,50);
+}
+
+function updateAutomationValueField(){
+  const action=document.getElementById("aut-action")?.value;
+  const wrap=document.getElementById("aut-value-wrap");
+  const label=document.getElementById("aut-value-label");
+  const inp=document.getElementById("aut-value");
+  if(!wrap) return;
+  const needs=["change_status","assign_to","add_tag","send_webhook"].includes(action);
+  wrap.style.display=needs?"block":"none";
+  if(action==="change_status"){label.textContent="Estado";inp.placeholder="Ex: Em Progresso";}
+  else if(action==="assign_to"){label.textContent="Nome do membro";inp.placeholder="Ex: Davi";}
+  else if(action==="add_tag"){label.textContent="Etiqueta";inp.placeholder="Ex: urgente";}
+  else if(action==="send_webhook"){label.textContent="URL webhook";inp.placeholder="https://discord.com/api/webhooks/...";}
+}
+
+function saveAutomationRule(idx){
+  const name=document.getElementById("aut-name")?.value.trim();
+  const trigger=document.getElementById("aut-trigger")?.value;
+  const action=document.getElementById("aut-action")?.value;
+  const actionValue=document.getElementById("aut-value")?.value.trim();
+  if(!name){toast("Nome obrigatório","w");return;}
+  const rules=getAutomations();
+  const rule={name,trigger,action,actionValue,enabled:true,runCount:0,createdAt:now()};
+  if(idx!==null&&idx!=="null") rules[idx]={...rules[idx],...rule};
+  else rules.push(rule);
+  saveAutomations(rules);
+  document.querySelector(".mo")?.remove();
+  toast(`✅ Automação "${name}" guardada!`,"s");
+  renderAutomations();
+}
+
+function toggleAutomation(idx){
+  const rules=getAutomations();
+  if(!rules[idx]) return;
+  rules[idx].enabled=!rules[idx].enabled;
+  saveAutomations(rules);
+  renderAutomations();
+  toast(rules[idx].enabled?"⚡ Automação ativada":"⏸️ Automação pausada","i");
+}
+function editAutomation(idx){ openNewAutomation(getAutomations()[idx],idx); }
+function deleteAutomation(idx){
+  const rules=getAutomations();
+  if(!confirm(`Eliminar "${rules[idx]?.name}"?`)) return;
+  rules.splice(idx,1);
+  saveAutomations(rules);
+  renderAutomations();
+  toast("Automação eliminada","i");
+}
+function addSuggestedAutomation(s){
+  const rules=getAutomations();
+  rules.push({...s,enabled:true,runCount:0,createdAt:now()});
+  saveAutomations(rules);
+  toast(`✅ "${s.name}" adicionada!`,"s");
+  renderAutomations();
+}
+
+function runAutomations(trigger,task){
+  const rules=getAutomations().filter(r=>r.enabled&&r.trigger===trigger);
+  rules.forEach(async rule=>{
+    rule.runCount=(rule.runCount||0)+1;
+    const all=getAutomations();
+    const i=all.findIndex(r=>r.name===rule.name&&r.trigger===rule.trigger);
+    if(i>=0){all[i].runCount=rule.runCount;saveAutomations(all);}
+    if(rule.action==="notify_assignee"&&task?.assignee){
+      await api("/api/notifications","POST",{user_id:task.assignee,type:"automation",title:`⚡ ${rule.name}`,message:`Automação executada em "${task.title}"`});
+    } else if(rule.action==="notify_all"){
+      S.users.forEach(async u=>await api("/api/notifications","POST",{user_id:u.id,type:"automation",title:`⚡ ${rule.name}`,message:`"${task.title}" foi processada automaticamente`}));
+    } else if(rule.action==="change_status"&&rule.actionValue&&task?.id){
+      await api(`/api/tasks/${task.id}`,"PATCH",{status:rule.actionValue});
+      const t=S.tasks.find(x=>x.id===task.id);
+      if(t){t.status=rule.actionValue;render(S.view);}
+    } else if(rule.action==="send_webhook"&&rule.actionValue){
+      try{await fetch(rule.actionValue,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({content:`⚡ **TaskFlow** — ${rule.name}`,embeds:[{title:task.title,description:`Estado: ${task.status}`,color:6579442,timestamp:new Date().toISOString()}]})});}catch(e){}
+    }
+  });
+}
+
+
 let lastChatCount = 0;
 
 async function renderChat(){

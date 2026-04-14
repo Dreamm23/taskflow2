@@ -211,6 +211,19 @@
         </div>
         <span>Relatórios</span>
       </a>
+      <a class="sb-a" data-v="gantt" onclick="nav('gantt')">
+        <div class="sb-icon">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="7" height="3" rx="1"/><rect x="7" y="9" width="10" height="3" rx="1"/><rect x="5" y="14" width="8" height="3" rx="1"/><rect x="10" y="19" width="9" height="3" rx="1"/></svg>
+        </div>
+        <span>Timeline</span>
+      </a>
+      <a class="sb-a" data-v="automations" onclick="nav('automations')">
+        <div class="sb-icon">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        </div>
+        <span>Automações</span>
+        <b class="sb-pill" id="b-automations" style="display:none">0</b>
+      </a>
       <a class="sb-a" data-v="chat" onclick="nav('chat')">
         <div class="sb-icon">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
@@ -294,9 +307,11 @@
       <div id="v-kanban"    class="view hidden"></div>
       <div id="v-calendar"  class="view hidden"></div>
       <div id="v-notes"     class="view hidden"></div>
-      <div id="v-team"      class="view hidden"></div>
-      <div id="v-reports"   class="view hidden"></div>
-      <div id="v-chat"      class="view hidden"></div>
+      <div id="v-team"        class="view hidden"></div>
+      <div id="v-reports"     class="view hidden"></div>
+      <div id="v-gantt"       class="view hidden"></div>
+      <div id="v-automations" class="view hidden"></div>
+      <div id="v-chat"        class="view hidden"></div>
       <div id="v-settings"  class="view hidden"></div>
     </div>
   </div>
@@ -457,6 +472,22 @@
         <label>Subtarefas</label>
         <div class="sub-adder"><input class="fi" id="mt-sub-i" placeholder="Nova subtarefa..." onkeydown="if(event.key==='Enter')addSub()"/><button class="btn-xs" onclick="addSub()">+</button></div>
         <div id="mt-subs"></div>
+      </div>
+      <div class="frow mt10">
+        <div class="fg">
+          <label>🔁 Repetição</label>
+          <select class="fi" id="mt-recur" onchange="toggleRecurEnd()">
+            <option value="">Sem repetição</option>
+            <option value="daily">Diariamente</option>
+            <option value="weekly">Semanalmente</option>
+            <option value="biweekly">De 2 em 2 semanas</option>
+            <option value="monthly">Mensalmente</option>
+          </select>
+        </div>
+        <div class="fg" id="mt-recur-end-wrap" style="display:none">
+          <label>Termina em</label>
+          <input type="date" class="fi" id="mt-recur-end" title="Data em que a repetição termina (opcional)"/>
+        </div>
       </div>
     </div>
     <div class="mfoot"><button class="btn-ghost" onclick="closeMo('mo-task')">Cancelar</button><button class="btn-cta" onclick="submitTask()">Criar Tarefa</button></div>

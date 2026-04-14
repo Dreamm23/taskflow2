@@ -89,7 +89,8 @@ GOOGLE_CLIENT_ID = "196981053682-28hre629rjctqs5v977j68u4h9l2aitb.apps.googleuse
 GEMINI_KEY       = os.environ.get("GEMINI_API_KEY", "AIzaSyCi3BjUhAiDcZBz5j38dWy9eF3LnmbXFgI")
 SMTP_EMAIL       = "sweetdeus@gmail.com"
 SMTP_PASSWORD    = "nwxogumqsaeetqta"
-DB_PATH          = os.path.join(os.path.dirname(__file__), "taskflow.db")
+DB_PATH = os.environ.get("DB_PATH", os.path.join(os.path.dirname(__file__), "taskflow.db"))
+# No Railway, definir DB_PATH=/data/taskflow.db e montar volume em /data
 
 VERIFY_CODES = {}
 BASE_URL = os.environ.get("BASE_URL", "http://127.0.0.1:5000")
@@ -172,6 +173,8 @@ def init_db():
         "ALTER TABLE users ADD COLUMN verified INTEGER DEFAULT 1",
         "ALTER TABLE projects ADD COLUMN deadline TEXT",
         "ALTER TABLE tasks ADD COLUMN pinned INTEGER DEFAULT 0",
+    "ALTER TABLE tasks ADD COLUMN recurrence TEXT DEFAULT NULL",
+    "ALTER TABLE tasks ADD COLUMN recurrence_end TEXT DEFAULT NULL",
     ]
     for migration in migrations:
         try:
@@ -298,6 +301,8 @@ def map_task(r):
     t["dependencies"] = pj(t.get("dependencies","[]"))
     t["pinned"]       = bool(t.get("pinned",0))
     t["deadline"]     = t.get("deadline") or ""
+    t["recurrence"]   = t.get("recurrence") or None
+    t["recurrenceEnd"]= t.get("recurrence_end") or None
     return t
 
 def map_project(r):
@@ -722,7 +727,38 @@ def patch_task(tid):
                 if field in d:
                     log_task_change(conn,tid,cu["id"],field,old_task[field],d[field])
     conn.execute(f"UPDATE tasks SET {','.join(sets)} WHERE id=?",vals); conn.commit()
-    row=conn.execute("SELECT * FROM tasks WHERE id=?",(tid,)).fetchone(); conn.close()
+    row=conn.execute("SELECT * FROM tasks WHERE id=?",(tid,)).fetchone()
+    # Criar próxima ocorrência se tarefa recorrente foi concluída
+    if "status" in d and d["status"] == "Concluído" and row:
+        t = map_task(row)
+        recur = t.get("recurrence")
+        if recur and t.get("deadline"):
+            try:
+                from datetime import timedelta
+                dl = datetime.strptime(t["deadline"], "%Y-%m-%d")
+                if recur == "daily":      next_dl = dl + timedelta(days=1)
+                elif recur == "weekly":   next_dl = dl + timedelta(weeks=1)
+                elif recur == "biweekly": next_dl = dl + timedelta(weeks=2)
+                elif recur == "monthly":
+                    m = dl.month + 1; y = dl.year + (1 if m > 12 else 0); m = m if m<=12 else 1
+                    next_dl = dl.replace(year=y, month=m)
+                else: next_dl = None
+                recur_end = t.get("recurrenceEnd")
+                if next_dl and (not recur_end or next_dl.strftime("%Y-%m-%d") <= recur_end):
+                    new_tid = uid()
+                    c2 = get_db()
+                    c2.execute("INSERT INTO tasks VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        (new_tid, t["title"], t.get("description",""), "A Fazer",
+                         t.get("priority","medium"), t.get("assignee",""),
+                         next_dl.strftime("%Y-%m-%d"), t.get("project",""),
+                         json.dumps(t.get("tags",[])), json.dumps([]),
+                         datetime.now().strftime("%Y-%m-%d"), json.dumps([]),
+                         json.dumps([]), 0, recur, recur_end))
+                    c2.commit(); c2.close()
+                    log_activity(cu["id"] if cu else "system", "criou (recorrência)", t["title"], "🔁")
+            except Exception as e:
+                print(f"[recurrence] Erro: {e}")
+    conn.close()
     return jsonify(map_task(row))
 
 @app.route("/api/tasks/<tid>", methods=["DELETE"])
