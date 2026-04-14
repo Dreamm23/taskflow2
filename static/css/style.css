@@ -37,8 +37,6 @@
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html { -webkit-text-size-adjust: 100%; }
 body { min-height: 100vh; min-height: -webkit-fill-available; }
-#login-screen { min-height: 100vh; min-height: -webkit-fill-available; }
-#app { min-height: 100vh; }
 img { max-width: 100%; }
 
 
@@ -74,10 +72,7 @@ html, body {
   background: var(--bg); color: var(--t);
   -webkit-font-smoothing: antialiased;
 }
-/* Login sempre visível por defeito — JS esconde quando faz login */
-#login-screen { display: flex; }
-#app { display: none; }
-#app:not(.hidden) { display: flex; }
+
 ::-webkit-scrollbar { width: 3px; height: 3px }
 ::-webkit-scrollbar-thumb { background: var(--bg5); border-radius: 3px }
 .hidden { display: none !important }
@@ -2185,54 +2180,4 @@ canvas {
   opacity: 1 !important;
 }
 
-/* ══════════════════════════════════════
-   MOBILE CRITICAL FIX
-   ══════════════════════════════════════ */
-@media (max-width: 768px) {
-  /* Fix altura no iOS Safari */
-  html { height: -webkit-fill-available; }
-  body { 
-    height: 100vh;
-    height: -webkit-fill-available;
-    overflow: hidden;
-  }
-  #login-screen {
-    height: 100vh;
-    height: -webkit-fill-available;
-    overflow-y: auto;
-  }
-  #app {
-    height: 100vh;
-    height: -webkit-fill-available;
-    overflow: hidden;
-  }
-  #main {
-    height: 100%;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-  }
-  #topbar {
-    flex-shrink: 0;
-    height: 54px;
-    min-height: 54px;
-  }
-  #views {
-    flex: 1;
-    overflow-y: auto !important;
-    overflow-x: hidden !important;
-    -webkit-overflow-scrolling: touch;
-    padding: 16px 14px 90px !important;
-    min-height: 0;
-  }
-  .view {
-    display: block !important;
-    min-height: 200px;
-  }
-  /* Garantir que o dashboard tem background */
-  #v-dashboard {
-    background: var(--bg);
-    min-height: 100%;
-    padding: 16px 0 !important;
-  }
-}
+

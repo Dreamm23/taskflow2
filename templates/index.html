@@ -17,12 +17,6 @@
 <script src="https://accounts.google.com/gsi/client" async defer onload="if(window.initGoogle)initGoogle()"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <link rel="stylesheet" href="/static/css/style.css"/>
-<style>
-#login-screen{display:flex!important}
-#login-screen.hidden{display:none!important}
-#app{display:none!important}
-#app:not(.hidden){display:flex!important}
-</style>
 </head>
 <body>
 
@@ -140,7 +134,7 @@
 </div>
 
 <!-- ████████ APP ████████ -->
-<div id="app">
+<div id="app" class="hidden">
 
   <!-- Mobile overlay -->
   <div id="sb-overlay" onclick="closeMobileSidebar()"></div>

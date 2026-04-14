@@ -119,8 +119,8 @@ const api = async (url, m="GET", b=null, timeoutMs=15000) => {
       localStorage.removeItem("tf_u");
       localStorage.removeItem("tf_creds");
       S.user = null;
-      document.getElementById("app")?.classList.add("hidden");
-      document.getElementById("login-screen")?.classList.remove("hidden");
+      document.getElementById("app").style.display = "none";
+      document.getElementById("login-screen").style.display = "flex";
       toast("A sessão expirou. Faz login novamente.","w");
       return {error:"Sessão expirada."};
     }
@@ -151,20 +151,31 @@ async function refreshAll(opts={}){
 
 // ── BOOT ──────────────────────────────────────────
 window.addEventListener("DOMContentLoaded", async () => {
-  // Mostrar login imediatamente enquanto verifica sessão
-  document.getElementById("login-screen")?.classList.remove("hidden");
-  document.getElementById("app")?.classList.add("hidden");
+  // SEMPRE mostrar login primeiro — nunca fica tela preta
+  const loginEl = document.getElementById("login-screen");
+  const appEl   = document.getElementById("app");
+  if(loginEl) loginEl.style.display = "flex";
+  if(appEl)   appEl.style.display   = "none";
 
+  // Carregar config com timeout curto (3s)
   let cfg = {};
-  try { cfg = await api("/api/config"); } catch(e) {}
-  S.gcid = cfg.google_client_id||""; S.hasGemini = cfg.has_gemini||false;
-  initGoogle(); updateAIStatus();
+  try {
+    cfg = await Promise.race([
+      api("/api/config"),
+      new Promise((_,r) => setTimeout(()=>r(new Error("timeout")), 3000))
+    ]);
+  } catch(e) { cfg = {}; }
 
-  // Verificar se há token de convite na URL
+  S.gcid = cfg?.google_client_id || "";
+  S.hasGemini = cfg?.has_gemini || false;
+  initGoogle();
+  updateAIStatus();
+
+  // Token de convite na URL
   const hasToken = new URLSearchParams(window.location.search).get("token");
   if(hasToken){ checkInviteToken(); return; }
 
-  // Tentar restaurar sessão do localStorage
+  // Tentar restaurar sessão
   const saved = localStorage.getItem("tf_u");
   if(saved){
     try {
@@ -174,26 +185,26 @@ window.addEventListener("DOMContentLoaded", async () => {
         localStorage.setItem("tf_u", JSON.stringify(me));
         await loadAll(); showApp(); return;
       }
-      // Sessão expirou — tentar re-login automático
+      // Re-login automático com credenciais guardadas
       const creds = localStorage.getItem("tf_creds");
       if(creds){
         const {email, password} = JSON.parse(creds);
         const r = await api("/api/auth/login","POST",{email,password});
-        if(r.user){
+        if(r && r.user){
           S.user = r.user;
           localStorage.setItem("tf_u", JSON.stringify(r.user));
           await loadAll(); showApp(); return;
         }
       }
-      // Limpar sessão inválida
-      localStorage.removeItem("tf_u");
-      localStorage.removeItem("tf_creds");
-    } catch(e) {
-      localStorage.removeItem("tf_u");
-    }
+    } catch(e) {}
+    // Sessão inválida — limpar
+    localStorage.removeItem("tf_u");
+    localStorage.removeItem("tf_creds");
   }
-  // Mostrar login
-  document.getElementById("login-screen")?.classList.remove("hidden");
+
+  // Garantir que o login está visível
+  if(loginEl) loginEl.style.display = "flex";
+  if(appEl)   appEl.style.display   = "none";
 });
 
 function initGoogle(){
@@ -286,8 +297,8 @@ async function checkNotifs(){
     if(!Array.isArray(n)) return;
     S.notifs = n;
     updateNotifBadge();
-    renderNotifList(n);
-  } catch(e) { console.warn("[checkNotifs]", e); }
+  } catch(e) {}
+  renderNotifList(n);
 }
 
 function updateAIStatus(){
@@ -384,21 +395,22 @@ async function resendCode(){
 async function doLogout(){
   await api("/api/auth/logout","POST");
   localStorage.removeItem("tf_u"); S.user=null;
-  document.getElementById("app").classList.add("hidden");
-  document.getElementById("login-screen").classList.remove("hidden");
+  document.getElementById("app").style.display = "none";
+  document.getElementById("login-screen").style.display = "flex";
   toast("Sessão terminada","i");
 }
 
 function showErr(id,msg){ const e=document.getElementById(id); e.textContent="⚠ "+msg; e.classList.remove("hidden"); setTimeout(()=>e.classList.add("hidden"),4500); }
 
 function showApp(){
-  document.getElementById("login-screen").classList.add("hidden");
-  document.getElementById("app").classList.remove("hidden");
+  const loginEl = document.getElementById("login-screen");
+  const appEl   = document.getElementById("app");
+  if(loginEl) loginEl.style.display = "none";
+  if(appEl)   appEl.style.display   = "flex";
   document.querySelectorAll(".view").forEach(v=>v.classList.add("hidden"));
   document.getElementById("v-dashboard").classList.remove("hidden");
   const aiPanel = document.getElementById("ai-panel");
   if(aiPanel) aiPanel.classList.add("closed");
-  // Restaurar estado da sidebar
   if(localStorage.getItem("tf_sb_closed")==="1" && window.innerWidth > 768){
     document.getElementById("sidebar")?.classList.add("closed");
   }
@@ -411,6 +423,7 @@ function showApp(){
   document.querySelector(".sb-a[data-v='dashboard']")?.classList.add("active");
   setTimeout(setupGlobalSearch, 400);
   setTimeout(()=>checkNotifs(), 1000);
+  updateAutomationBadge();
 }
 
 // ─── ONBOARDING ───────────────────────────────
@@ -3175,9 +3188,7 @@ function toggleNotif(){ document.getElementById("notif-panel").classList.toggle(
 function closeNotif(){ document.getElementById("notif-panel").classList.add("hidden"); document.getElementById("notif-overlay").classList.add("hidden"); }
 
 function renderNotifList(notifs){
-  notifs = Array.isArray(notifs) ? notifs : (S.notifs||[]);
   const el=document.getElementById("notif-list");
-  if(!el) return;
   if(!notifs.length){el.innerHTML=`<div class="empty-st" style="padding:24px"><div class="empty-i" style="font-size:26px">🔔</div><div class="empty-t">Sem notificações</div></div>`;return;}
   el.innerHTML=notifs.map(n=>`<div class="nitem ${!n.read?"unread":""}">
     <div class="nitem-ico">${{task:"📋",comment:"💬",deadline:"⏰",mention:"@"}[n.type]||"🔔"}</div>
