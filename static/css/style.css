@@ -74,10 +74,11 @@ html, body {
   background: var(--bg); color: var(--t);
   -webkit-font-smoothing: antialiased;
 }
-/* Login sempre visível por defeito — JS esconde quando faz login */
-#login-screen { display: flex; }
-#app { display: none; }
-#app:not(.hidden) { display: flex; }
+/* ── Visibilidade base — login sempre visível, app escondido ── */
+#login-screen { display: flex !important; }
+#login-screen.hidden { display: none !important; }
+#app { display: none !important; }
+#app.visible { display: flex !important; }
 ::-webkit-scrollbar { width: 3px; height: 3px }
 ::-webkit-scrollbar-thumb { background: var(--bg5); border-radius: 3px }
 .hidden { display: none !important }
@@ -247,7 +248,7 @@ html, body {
 }
 
 /* ── APP LAYOUT ──────────────────────── */
-#app { display: flex; height: 100vh; height: 100dvh; overflow: hidden }
+#app.visible { height: 100vh; height: 100dvh; overflow: hidden }
 
 /* ── SIDEBAR — Premium Design ─────────── */
 #sidebar {
