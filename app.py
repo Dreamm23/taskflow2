@@ -6,23 +6,9 @@ import uuid, os, json, random, smtplib, sqlite3, hashlib, hmac
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-app = Flask(__name__,
-    template_folder=os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates"),
-    static_folder=os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
-)
+app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "taskflow_v8_secret_k3y_2026_xR9#mP2$qN7@wL4")
-
-# ── Diagnóstico de arranque ────────────────────────
-import sys
-_base = os.path.dirname(os.path.abspath(__file__))
-_tmpl = os.path.join(_base, "templates", "index.html")
-_js   = os.path.join(_base, "static", "js", "app.js")
-_css  = os.path.join(_base, "static", "css", "style.css")
-print(f"[PATHS] base={_base}", file=sys.stderr)
-print(f"[PATHS] index.html exists: {os.path.exists(_tmpl)}", file=sys.stderr)
-print(f"[PATHS] app.js exists:     {os.path.exists(_js)}", file=sys.stderr)
-print(f"[PATHS] style.css exists:  {os.path.exists(_css)}", file=sys.stderr)
-app.config["SESSION_COOKIE_SECURE"] = os.environ.get("FLASK_ENV") == "production"
+app.config["SESSION_COOKIE_SECURE"] = False
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["PERMANENT_SESSION_LIFETIME"] = 60 * 60 * 24 * 30  # 30 dias
@@ -442,45 +428,8 @@ def send_mention_email(user, mentioned_by, task_title, comment_text):
         print(f"[EMAIL MENTION] Erro: {e}")
 
 # ═══════════════ ROUTES ═══════════════
-# Cache busting — força o browser a buscar JS/CSS novos após deploy
-import hashlib as _hashlib
-
-def _file_hash(path):
-    try:
-        with open(path, "rb") as f:
-            return _hashlib.md5(f.read()).hexdigest()[:8]
-    except:
-        return "v1"
-
 @app.route("/")
-def index():
-    try:
-        _base = os.path.dirname(os.path.abspath(__file__))
-        _js_v  = _file_hash(os.path.join(_base, "static", "js", "app.js"))
-        _css_v = _file_hash(os.path.join(_base, "static", "css", "style.css"))
-        return render_template("index.html", js_v=_js_v, css_v=_css_v)
-    except Exception as e:
-        # Fallback HTML inline se templates não forem encontrados
-        import sys
-        print(f"[ERROR] render_template failed: {e}", file=sys.stderr)
-        base = os.path.dirname(os.path.abspath(__file__))
-        tmpl = os.path.join(base, "templates", "index.html")
-        if os.path.exists(tmpl):
-            with open(tmpl, "r", encoding="utf-8") as f2:
-                return f2.read(), 200, {"Content-Type": "text/html"}
-        return f"<h1>TaskFlow</h1><p>Erro ao carregar template: {e}</p><p>Base: {base}</p>", 500
-
-@app.route("/health")
-def health():
-    import sys
-    base = os.path.dirname(os.path.abspath(__file__))
-    return jsonify({
-        "ok": True,
-        "base": base,
-        "templates": os.path.exists(os.path.join(base, "templates", "index.html")),
-        "static_js": os.path.exists(os.path.join(base, "static", "js", "app.js")),
-        "static_css": os.path.exists(os.path.join(base, "static", "css", "style.css")),
-    })
+def index(): return render_template("index.html")
 
 @app.route("/api/config")
 def get_config(): return jsonify({"google_client_id":GOOGLE_CLIENT_ID,"has_gemini":bool(GEMINI_KEY)})

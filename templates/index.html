@@ -16,12 +16,12 @@
 <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet"/></noscript>
 <script src="https://accounts.google.com/gsi/client" async defer onload="if(window.initGoogle)initGoogle()"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<link rel="stylesheet" href="/static/css/style.css?v={{ css_v }}"/>
+<link rel="stylesheet" href="/static/css/style.css"/>
 <style>
 #login-screen{display:flex!important}
 #login-screen.hidden{display:none!important}
-#app{display:none}
-#app.visible{display:flex!important}
+#app{display:none!important}
+#app:not(.hidden){display:flex!important}
 </style>
 </head>
 <body>
@@ -584,6 +584,6 @@
 <!-- Toasts -->
 <div id="toasts"></div>
 
-<script src="/static/js/app.js?v={{ js_v }}"></script>
+<script src="/static/js/app.js"></script>
 </body>
 </html>

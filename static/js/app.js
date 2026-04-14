@@ -85,26 +85,6 @@ const S = {
 };
 let chatPollInterval = null;
 
-// ── GLOBAL ERROR HANDLER — nunca ecrã preto por erro JS ──
-window.addEventListener("error", function(e){
-  console.error("[TaskFlow global error]", e.message, e.filename, e.lineno);
-  // Se o app ainda não foi mostrado e o login está escondido, forçar login
-  const ap = document.getElementById("app");
-  const ls = document.getElementById("login-screen");
-  if(ap && ls){
-    const apVisible = ap.classList.contains("visible") || ap.style.display === "flex";
-    const lsVisible = !ls.classList.contains("hidden") && ls.style.display !== "none";
-    if(!apVisible && !lsVisible){
-      // Tudo escondido = ecrã preto — forçar login
-      ls.style.setProperty("display","flex","important");
-      ls.classList.remove("hidden");
-    }
-  }
-});
-window.addEventListener("unhandledrejection", function(e){
-  console.error("[TaskFlow unhandled promise]", e.reason);
-});
-
 // ── API ────────────────────────────────────────────
 const api = async (url, m="GET", b=null, timeoutMs=15000) => {
   const o={method:m,headers:{"Content-Type":"application/json"}};
@@ -139,8 +119,8 @@ const api = async (url, m="GET", b=null, timeoutMs=15000) => {
       localStorage.removeItem("tf_u");
       localStorage.removeItem("tf_creds");
       S.user = null;
-      const _ap=document.getElementById("app"); if(_ap){_ap.classList.remove("visible");_ap.classList.remove("hidden");_ap.removeAttribute("style");}
-      const _ls=document.getElementById("login-screen"); if(_ls){_ls.classList.remove("hidden");_ls.removeAttribute("style");}
+      document.getElementById("app")?.classList.add("hidden");
+      document.getElementById("login-screen")?.classList.remove("hidden");
       toast("A sessão expirou. Faz login novamente.","w");
       return {error:"Sessão expirada."};
     }
@@ -170,90 +150,50 @@ async function refreshAll(opts={}){
 }
 
 // ── BOOT ──────────────────────────────────────────
-function hideLoading(){
-  const el = document.getElementById("tf-loading");
-  if(el){
-    el.style.transition = "opacity .25s";
-    el.style.opacity = "0";
-    setTimeout(()=>{ if(el.parentNode) el.parentNode.removeChild(el); }, 280);
-  }
-}
-
-function setLoadingMsg(msg){
-  const el = document.getElementById("tf-loading-msg");
-  if(el) el.textContent = msg;
-}
-
-function forceLogin(){
-  try{ hideLoading(); }catch(e){}
-  const ls = document.getElementById("login-screen");
-  const ap = document.getElementById("app");
-  if(ls){ ls.classList.remove("hidden"); ls.removeAttribute("style"); }
-  if(ap){
-    ap.classList.remove("visible");
-    ap.classList.remove("hidden"); // nunca esconder com hidden — só não ter visible
-    ap.removeAttribute("style");
-  }
-  if(window.__tfSafetyTimer){ clearTimeout(window.__tfSafetyTimer); window.__tfSafetyTimer=null; }
-}
-
 window.addEventListener("DOMContentLoaded", async () => {
-  // STEP 1: login visível IMEDIATAMENTE — nunca ecrã preto
-  forceLogin();
+  // Mostrar login imediatamente enquanto verifica sessão
+  document.getElementById("login-screen")?.classList.remove("hidden");
+  document.getElementById("app")?.classList.add("hidden");
 
-  setLoadingMsg("A verificar sessão...");
-  // STEP 2: config com timeout curto
   let cfg = {};
-  try {
-    const cfgResult = await Promise.race([
-      api("/api/config"),
-      new Promise((_,rej)=>setTimeout(()=>rej(new Error("t")),5000))
-    ]);
-    if(cfgResult && !cfgResult.error) cfg = cfgResult;
-  } catch(e) { console.warn("[boot] config:", e.message); }
-
+  try { cfg = await api("/api/config"); } catch(e) {}
   S.gcid = cfg.google_client_id||""; S.hasGemini = cfg.has_gemini||false;
   initGoogle(); updateAIStatus();
 
-  // STEP 3: token de convite
+  // Verificar se há token de convite na URL
   const hasToken = new URLSearchParams(window.location.search).get("token");
   if(hasToken){ checkInviteToken(); return; }
 
-  setLoadingMsg("A restaurar sessão...");
-  // STEP 4: restaurar sessão
-  if(!localStorage.getItem("tf_u")){ forceLogin(); return; }
-
-  try {
-    const me = await Promise.race([
-      api("/api/auth/me"),
-      new Promise((_,rej)=>setTimeout(()=>rej(new Error("t")),8000))
-    ]);
-    if(me && me.id && !me.error){
-      S.user = me;
-      localStorage.setItem("tf_u", JSON.stringify(me));
-      try { await loadAll(); } catch(e){ console.error("[loadAll]",e); }
-      showApp(); return;
-    }
-    // Sessão expirou — re-login automático
-    const creds = localStorage.getItem("tf_creds");
-    if(creds){
-      try {
+  // Tentar restaurar sessão do localStorage
+  const saved = localStorage.getItem("tf_u");
+  if(saved){
+    try {
+      const me = await api("/api/auth/me");
+      if(me && me.id){
+        S.user = me;
+        localStorage.setItem("tf_u", JSON.stringify(me));
+        await loadAll(); showApp(); return;
+      }
+      // Sessão expirou — tentar re-login automático
+      const creds = localStorage.getItem("tf_creds");
+      if(creds){
         const {email, password} = JSON.parse(creds);
         const r = await api("/api/auth/login","POST",{email,password});
-        if(r && r.user){
+        if(r.user){
           S.user = r.user;
           localStorage.setItem("tf_u", JSON.stringify(r.user));
-          try { await loadAll(); } catch(e){ console.error("[loadAll]",e); }
-          showApp(); return;
+          await loadAll(); showApp(); return;
         }
-      } catch(e){ console.warn("[boot] relogin:",e); }
+      }
+      // Limpar sessão inválida
+      localStorage.removeItem("tf_u");
+      localStorage.removeItem("tf_creds");
+    } catch(e) {
+      localStorage.removeItem("tf_u");
     }
-  } catch(e) { console.warn("[boot] session:",e.message); }
-
-  // STEP 5: fallback seguro
-  localStorage.removeItem("tf_u");
-  localStorage.removeItem("tf_creds");
-  forceLogin();
+  }
+  // Mostrar login
+  document.getElementById("login-screen")?.classList.remove("hidden");
 });
 
 function initGoogle(){
@@ -444,24 +384,16 @@ async function resendCode(){
 async function doLogout(){
   await api("/api/auth/logout","POST");
   localStorage.removeItem("tf_u"); S.user=null;
-  const _ap2=document.getElementById("app"); if(_ap2){_ap2.classList.remove("visible");_ap2.classList.remove("hidden");_ap2.removeAttribute("style");}
-  const _ls2=document.getElementById("login-screen"); if(_ls2){_ls2.classList.remove("hidden");_ls2.removeAttribute("style");}
+  document.getElementById("app").classList.add("hidden");
+  document.getElementById("login-screen").classList.remove("hidden");
   toast("Sessão terminada","i");
 }
 
 function showErr(id,msg){ const e=document.getElementById(id); e.textContent="⚠ "+msg; e.classList.remove("hidden"); setTimeout(()=>e.classList.add("hidden"),4500); }
 
 function showApp(){
-  try{ hideLoading(); }catch(e){}
-  const ls=document.getElementById("login-screen");
-  const ap=document.getElementById("app");
-  if(ls){ ls.classList.add("hidden"); ls.removeAttribute("style"); }
-  if(ap){
-    ap.classList.remove("hidden"); // CRÍTICO: remover hidden antes de adicionar visible
-    ap.classList.add("visible");
-    ap.removeAttribute("style");
-  }
-  if(window.__tfSafetyTimer){ clearTimeout(window.__tfSafetyTimer); window.__tfSafetyTimer=null; }
+  document.getElementById("login-screen").classList.add("hidden");
+  document.getElementById("app").classList.remove("hidden");
   document.querySelectorAll(".view").forEach(v=>v.classList.add("hidden"));
   document.getElementById("v-dashboard").classList.remove("hidden");
   const aiPanel = document.getElementById("ai-panel");
@@ -844,7 +776,7 @@ async function checkInviteToken(){
   // Guardar token
   document.getElementById("mo-invite").dataset.token = token;
   // Esconder login
-  const _ls3=document.getElementById("login-screen"); if(_ls3){_ls3.classList.add("hidden");_ls3.style.cssText="display:none!important";}
+  document.getElementById("login-screen").classList.add("hidden");
 }
 
 async function acceptInvite(){
