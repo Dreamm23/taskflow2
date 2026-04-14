@@ -1113,6 +1113,7 @@ function renderDash(){
   });
 }
 
+
 function toggleDashCustomize(){
   const panel = document.getElementById("dash-customize-panel");
   if(!panel) return;
