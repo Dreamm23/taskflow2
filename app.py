@@ -6,7 +6,12 @@ import uuid, os, json, random, smtplib, sqlite3, hashlib, hmac
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-app = Flask(__name__)
+import os
+_base = os.path.dirname(os.path.abspath(__file__))
+app = Flask(__name__,
+    template_folder=os.path.join(_base, "templates"),
+    static_folder=os.path.join(_base, "static")
+)
 app.secret_key = os.environ.get("SECRET_KEY", "taskflow_v8_secret_k3y_2026_xR9#mP2$qN7@wL4")
 app.config["SESSION_COOKIE_SECURE"] = False
 app.config["SESSION_COOKIE_HTTPONLY"] = True
@@ -89,8 +94,17 @@ GOOGLE_CLIENT_ID = "196981053682-28hre629rjctqs5v977j68u4h9l2aitb.apps.googleuse
 GEMINI_KEY       = os.environ.get("GEMINI_API_KEY", "AIzaSyCi3BjUhAiDcZBz5j38dWy9eF3LnmbXFgI")
 SMTP_EMAIL       = "sweetdeus@gmail.com"
 SMTP_PASSWORD    = "nwxogumqsaeetqta"
-DB_PATH = os.environ.get("DB_PATH", os.path.join(os.path.dirname(__file__), "taskflow.db"))
-# No Railway, definir DB_PATH=/data/taskflow.db e montar volume em /data
+DB_PATH = os.environ.get("DB_PATH", os.path.join(os.path.dirname(os.path.abspath(__file__)), "taskflow.db"))
+# Criar diretório se não existir (necessário para volume Railway)
+_db_dir = os.path.dirname(DB_PATH)
+if _db_dir and not os.path.exists(_db_dir):
+    try:
+        os.makedirs(_db_dir, exist_ok=True)
+        print(f"✅ Diretório criado: {_db_dir}")
+    except Exception as e:
+        # Se não conseguir criar /data, usar pasta local
+        DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "taskflow.db")
+        print(f"⚠️ Usando DB local: {DB_PATH} (erro: {e})")
 
 VERIFY_CODES = {}
 BASE_URL = os.environ.get("BASE_URL", "http://127.0.0.1:5000")
