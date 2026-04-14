@@ -386,6 +386,11 @@ function showApp(){
   document.getElementById("v-dashboard").classList.remove("hidden");
   const aiPanel = document.getElementById("ai-panel");
   if(aiPanel) aiPanel.classList.add("closed");
+  // Restaurar estado da sidebar
+  if(localStorage.getItem("tf_sb_closed")==="1" && window.innerWidth > 768){
+    document.getElementById("sidebar")?.classList.add("closed");
+  }
+  setTimeout(updateMenuBtn, 100);
   S.view = "dashboard";
   updateSB();
   renderSBProjs();
@@ -393,7 +398,6 @@ function showApp(){
   document.querySelectorAll(".sb-a").forEach(a=>a.classList.remove("active"));
   document.querySelector(".sb-a[data-v='dashboard']")?.classList.add("active");
   setTimeout(setupGlobalSearch, 400);
-  // Iniciar verificação de notificações
   setTimeout(()=>checkNotifs(), 1000);
 }
 
@@ -1102,7 +1106,9 @@ function renderDash(){
 
   document.getElementById("v-dashboard").innerHTML = html;
   requestAnimationFrame(()=>{
-    if(w.includes("charts")) initCharts(wb,wlabels,tasks);
+    try {
+      if(w.includes("charts")) initCharts(wb,wlabels,tasks);
+    } catch(e){ console.warn("Chart error:", e); }
     if(w.includes("weather")) setTimeout(loadWeather, 100);
   });
 }
@@ -1276,6 +1282,11 @@ async function loadWeather(){
 let _chartWeekly = null, _chartStatus = null;
 
 function initCharts(wb, wlabels, tasks){
+  // Verificar se Chart.js está disponível
+  if(typeof Chart === 'undefined'){
+    console.warn("Chart.js não disponível");
+    return;
+  }
   // Destroy old charts
   if(_chartWeekly){ _chartWeekly.destroy(); _chartWeekly=null; }
   if(_chartStatus){ _chartStatus.destroy(); _chartStatus=null; }
@@ -3396,6 +3407,21 @@ function toggleSidebar(){
     ov?.classList.toggle("on", sb.classList.contains("mobile-open"));
   } else {
     sb.classList.toggle("closed");
+    localStorage.setItem("tf_sb_closed", sb.classList.contains("closed") ? "1" : "0");
+    updateMenuBtn();
+  }
+}
+
+function updateMenuBtn(){
+  const sb = document.getElementById("sidebar");
+  const btn = document.querySelector(".tb-menu");
+  if(!btn) return;
+  const isClosed = sb?.classList.contains("closed");
+  const isMobile = window.innerWidth <= 768;
+  if(isMobile){
+    btn.style.display = "flex";
+  } else {
+    btn.style.display = isClosed ? "flex" : "none";
   }
 }
 
