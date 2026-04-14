@@ -395,8 +395,10 @@ async function resendCode(){
 async function doLogout(){
   await api("/api/auth/logout","POST");
   localStorage.removeItem("tf_u"); S.user=null;
-  document.getElementById("app").style.display = "none";
-  document.getElementById("login-screen").style.display = "flex";
+  const _a = document.getElementById("app");
+  const _l = document.getElementById("login-screen");
+  if(_a){ _a.style.display="none"; _a.classList.remove("visible"); }
+  if(_l) _l.style.display = "flex";
   toast("Sessão terminada","i");
 }
 
@@ -406,7 +408,7 @@ function showApp(){
   const loginEl = document.getElementById("login-screen");
   const appEl   = document.getElementById("app");
   if(loginEl) loginEl.style.display = "none";
-  if(appEl)   appEl.style.display   = "flex";
+  if(appEl){ appEl.style.display = "flex"; appEl.classList.add("visible"); }
   document.querySelectorAll(".view").forEach(v=>v.classList.add("hidden"));
   document.getElementById("v-dashboard").classList.remove("hidden");
   const aiPanel = document.getElementById("ai-panel");
