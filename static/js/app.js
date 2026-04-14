@@ -151,25 +151,30 @@ async function refreshAll(opts={}){
 
 // ── BOOT ──────────────────────────────────────────
 window.addEventListener("DOMContentLoaded", async () => {
-  const cfg = await api("/api/config");
+  // Mostrar login imediatamente enquanto verifica sessão
+  document.getElementById("login-screen")?.classList.remove("hidden");
+  document.getElementById("app")?.classList.add("hidden");
+
+  let cfg = {};
+  try { cfg = await api("/api/config"); } catch(e) {}
   S.gcid = cfg.google_client_id||""; S.hasGemini = cfg.has_gemini||false;
   initGoogle(); updateAIStatus();
+
   // Verificar se há token de convite na URL
   const hasToken = new URLSearchParams(window.location.search).get("token");
   if(hasToken){ checkInviteToken(); return; }
-  // Tentar restaurar sessão do localStorage (persiste entre sessões)
+
+  // Tentar restaurar sessão do localStorage
   const saved = localStorage.getItem("tf_u");
   if(saved){
     try {
-      const userData = JSON.parse(saved);
-      // Verificar se a sessão no servidor ainda é válida
       const me = await api("/api/auth/me");
       if(me && me.id){
         S.user = me;
         localStorage.setItem("tf_u", JSON.stringify(me));
         await loadAll(); showApp(); return;
       }
-      // Sessão expirou — tentar re-login automático com credenciais guardadas
+      // Sessão expirou — tentar re-login automático
       const creds = localStorage.getItem("tf_creds");
       if(creds){
         const {email, password} = JSON.parse(creds);
@@ -180,11 +185,15 @@ window.addEventListener("DOMContentLoaded", async () => {
           await loadAll(); showApp(); return;
         }
       }
-      // Não conseguiu re-login — limpar e mostrar login
+      // Limpar sessão inválida
       localStorage.removeItem("tf_u");
       localStorage.removeItem("tf_creds");
-    } catch(e) { localStorage.removeItem("tf_u"); }
+    } catch(e) {
+      localStorage.removeItem("tf_u");
+    }
   }
+  // Mostrar login
+  document.getElementById("login-screen")?.classList.remove("hidden");
 });
 
 function initGoogle(){
@@ -245,8 +254,7 @@ async function handleGoogleCb(resp){
 
 async function loadAll(){
   try {
-    // Carregar tudo em paralelo para máxima performance
-    const [tasks, users, projects, events, notes, activity, notifs, cfg] = await Promise.all([
+    const results = await Promise.allSettled([
       api("/api/tasks"),
       api("/api/users"),
       api("/api/projects"),
@@ -256,6 +264,7 @@ async function loadAll(){
       api("/api/notifications"),
       api("/api/config"),
     ]);
+    const [tasks, users, projects, events, notes, activity, notifs, cfg] = results.map(r => r.status === "fulfilled" ? r.value : null);
     S.tasks    = Array.isArray(tasks)    ? tasks    : [];
     S.users    = Array.isArray(users)    ? users    : [];
     S.projects = Array.isArray(projects) ? projects : [];
