@@ -94,17 +94,7 @@ GOOGLE_CLIENT_ID = "196981053682-28hre629rjctqs5v977j68u4h9l2aitb.apps.googleuse
 GEMINI_KEY       = os.environ.get("GEMINI_API_KEY", "AIzaSyCi3BjUhAiDcZBz5j38dWy9eF3LnmbXFgI")
 SMTP_EMAIL       = "sweetdeus@gmail.com"
 SMTP_PASSWORD    = "nwxogumqsaeetqta"
-DB_PATH = os.environ.get("DB_PATH", os.path.join(os.path.dirname(os.path.abspath(__file__)), "taskflow.db"))
-# Criar diretório se não existir (necessário para volume Railway)
-_db_dir = os.path.dirname(DB_PATH)
-if _db_dir and not os.path.exists(_db_dir):
-    try:
-        os.makedirs(_db_dir, exist_ok=True)
-        print(f"✅ Diretório criado: {_db_dir}")
-    except Exception as e:
-        # Se não conseguir criar /data, usar pasta local
-        DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "taskflow.db")
-        print(f"⚠️ Usando DB local: {DB_PATH} (erro: {e})")
+DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "taskflow.db")
 
 VERIFY_CODES = {}
 BASE_URL = os.environ.get("BASE_URL", "http://127.0.0.1:5000")
