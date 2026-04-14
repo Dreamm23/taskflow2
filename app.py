@@ -225,16 +225,16 @@ def init_db():
         c.executemany("INSERT INTO projects VALUES (?,?,?,?,?,?,?,?,?)", projects)
 
         tasks = [
-            ("t1","Redesign da Landing Page","Atualizar visual com novo branding.","Em Progresso","high","u3",'["design","feature"]',d(3),"p1",'[{"id":"s1","title":"Wireframes","done":true},{"id":"s2","title":"Mockup final","done":false}]','[]',d(-5),1,'[]'),
-            ("t2","API de Autenticação JWT","Refresh tokens e 2FA.","A Fazer","high","u4",'["dev","feature"]',d(7),"p1",'[{"id":"s3","title":"Endpoint login","done":false}]','[]',d(-2),0,'[]'),
-            ("t3","Corrigir bug no formulário","Validação falha em Safari.","Revisão","medium","u4",'["bug"]',d(1),"p2",'[{"id":"s4","title":"Reproduzir","done":true}]','[]',d(-8),0,'[]'),
-            ("t4","Documentação da API","Swagger completo.","A Fazer","low","u2",'["docs"]',d(14),"p1",'[]','[]',d(-1),0,'[]'),
-            ("t5","Dashboard Analytics","Métricas em tempo real.","Em Progresso","medium","u4",'["dev"]',d(10),"p1",'[{"id":"s5","title":"Chart.js","done":true}]','[]',d(-3),0,'[]'),
-            ("t6","Setup CI/CD","GitHub Actions automático.","Concluído","high","u2",'["devops"]',d(-2),"p3",'[{"id":"s6","title":"Workflow","done":true}]','[]',d(-15),0,'[]'),
-            ("t7","Design System","Componentes com Storybook.","Em Progresso","high","u3",'["design"]',d(20),"p2",'[{"id":"s7","title":"Tokens","done":true}]','[]',d(-10),0,'[]'),
-            ("t8","Testes de Performance","Lighthouse audit completo.","A Fazer","medium","u4",'["dev"]',d(15),"p3",'[]','[]',d(-1),0,'[]'),
+            ("t1","Redesign da Landing Page","Atualizar visual com novo branding.","Em Progresso","high","u3",'["design","feature"]',d(3),"p1",'[{"id":"s1","title":"Wireframes","done":true},{"id":"s2","title":"Mockup final","done":false}]','[]',d(-5),1,'[]',None,None),
+            ("t2","API de Autenticação JWT","Refresh tokens e 2FA.","A Fazer","high","u4",'["dev","feature"]',d(7),"p1",'[{"id":"s3","title":"Endpoint login","done":false}]','[]',d(-2),0,'[]',None,None),
+            ("t3","Corrigir bug no formulário","Validação falha em Safari.","Revisão","medium","u4",'["bug"]',d(1),"p2",'[{"id":"s4","title":"Reproduzir","done":true}]','[]',d(-8),0,'[]',None,None),
+            ("t4","Documentação da API","Swagger completo.","A Fazer","low","u2",'["docs"]',d(14),"p1",'[]','[]',d(-1),0,'[]',None,None),
+            ("t5","Dashboard Analytics","Métricas em tempo real.","Em Progresso","medium","u4",'["dev"]',d(10),"p1",'[{"id":"s5","title":"Chart.js","done":true}]','[]',d(-3),0,'[]',None,None),
+            ("t6","Setup CI/CD","GitHub Actions automático.","Concluído","high","u2",'["devops"]',d(-2),"p3",'[{"id":"s6","title":"Workflow","done":true}]','[]',d(-15),0,'[]',None,None),
+            ("t7","Design System","Componentes com Storybook.","Em Progresso","high","u3",'["design"]',d(20),"p2",'[{"id":"s7","title":"Tokens","done":true}]','[]',d(-10),0,'[]',None,None),
+            ("t8","Testes de Performance","Lighthouse audit completo.","A Fazer","medium","u4",'["dev"]',d(15),"p3",'[]','[]',d(-1),0,'[]',None,None),
         ]
-        c.executemany("INSERT INTO tasks VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)", tasks)
+        c.executemany("INSERT INTO tasks VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", tasks)
 
         events = [
             ("e1","Sprint Planning",d(1)+"T10:00",d(1)+"T11:00","#6366f1","p1","meeting","Planeamento da sprint",'["u1","u2","u3","u4"]',0),
