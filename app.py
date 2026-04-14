@@ -6,12 +6,7 @@ import uuid, os, json, random, smtplib, sqlite3, hashlib, hmac
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-import os
-_base = os.path.dirname(os.path.abspath(__file__))
-app = Flask(__name__,
-    template_folder=os.path.join(_base, "templates"),
-    static_folder=os.path.join(_base, "static")
-)
+app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "taskflow_v8_secret_k3y_2026_xR9#mP2$qN7@wL4")
 app.config["SESSION_COOKIE_SECURE"] = False
 app.config["SESSION_COOKIE_HTTPONLY"] = True
@@ -94,7 +89,8 @@ GOOGLE_CLIENT_ID = "196981053682-28hre629rjctqs5v977j68u4h9l2aitb.apps.googleuse
 GEMINI_KEY       = os.environ.get("GEMINI_API_KEY", "AIzaSyCi3BjUhAiDcZBz5j38dWy9eF3LnmbXFgI")
 SMTP_EMAIL       = "sweetdeus@gmail.com"
 SMTP_PASSWORD    = "nwxogumqsaeetqta"
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "taskflow.db")
+DB_PATH = os.environ.get("DB_PATH", os.path.join(os.path.dirname(__file__), "taskflow.db"))
+# No Railway, definir DB_PATH=/data/taskflow.db e montar volume em /data
 
 VERIFY_CODES = {}
 BASE_URL = os.environ.get("BASE_URL", "http://127.0.0.1:5000")
@@ -229,16 +225,16 @@ def init_db():
         c.executemany("INSERT INTO projects VALUES (?,?,?,?,?,?,?,?,?)", projects)
 
         tasks = [
-            ("t1","Redesign da Landing Page","Atualizar visual com novo branding.","Em Progresso","high","u3",'["design","feature"]',d(3),"p1",'[{"id":"s1","title":"Wireframes","done":true},{"id":"s2","title":"Mockup final","done":false}]','[]',d(-5),1,'[]',None,None),
-            ("t2","API de Autenticação JWT","Refresh tokens e 2FA.","A Fazer","high","u4",'["dev","feature"]',d(7),"p1",'[{"id":"s3","title":"Endpoint login","done":false}]','[]',d(-2),0,'[]',None,None),
-            ("t3","Corrigir bug no formulário","Validação falha em Safari.","Revisão","medium","u4",'["bug"]',d(1),"p2",'[{"id":"s4","title":"Reproduzir","done":true}]','[]',d(-8),0,'[]',None,None),
-            ("t4","Documentação da API","Swagger completo.","A Fazer","low","u2",'["docs"]',d(14),"p1",'[]','[]',d(-1),0,'[]',None,None),
-            ("t5","Dashboard Analytics","Métricas em tempo real.","Em Progresso","medium","u4",'["dev"]',d(10),"p1",'[{"id":"s5","title":"Chart.js","done":true}]','[]',d(-3),0,'[]',None,None),
-            ("t6","Setup CI/CD","GitHub Actions automático.","Concluído","high","u2",'["devops"]',d(-2),"p3",'[{"id":"s6","title":"Workflow","done":true}]','[]',d(-15),0,'[]',None,None),
-            ("t7","Design System","Componentes com Storybook.","Em Progresso","high","u3",'["design"]',d(20),"p2",'[{"id":"s7","title":"Tokens","done":true}]','[]',d(-10),0,'[]',None,None),
-            ("t8","Testes de Performance","Lighthouse audit completo.","A Fazer","medium","u4",'["dev"]',d(15),"p3",'[]','[]',d(-1),0,'[]',None,None),
+            ("t1","Redesign da Landing Page","Atualizar visual com novo branding.","Em Progresso","high","u3",'["design","feature"]',d(3),"p1",'[{"id":"s1","title":"Wireframes","done":true},{"id":"s2","title":"Mockup final","done":false}]','[]',d(-5),1,'[]'),
+            ("t2","API de Autenticação JWT","Refresh tokens e 2FA.","A Fazer","high","u4",'["dev","feature"]',d(7),"p1",'[{"id":"s3","title":"Endpoint login","done":false}]','[]',d(-2),0,'[]'),
+            ("t3","Corrigir bug no formulário","Validação falha em Safari.","Revisão","medium","u4",'["bug"]',d(1),"p2",'[{"id":"s4","title":"Reproduzir","done":true}]','[]',d(-8),0,'[]'),
+            ("t4","Documentação da API","Swagger completo.","A Fazer","low","u2",'["docs"]',d(14),"p1",'[]','[]',d(-1),0,'[]'),
+            ("t5","Dashboard Analytics","Métricas em tempo real.","Em Progresso","medium","u4",'["dev"]',d(10),"p1",'[{"id":"s5","title":"Chart.js","done":true}]','[]',d(-3),0,'[]'),
+            ("t6","Setup CI/CD","GitHub Actions automático.","Concluído","high","u2",'["devops"]',d(-2),"p3",'[{"id":"s6","title":"Workflow","done":true}]','[]',d(-15),0,'[]'),
+            ("t7","Design System","Componentes com Storybook.","Em Progresso","high","u3",'["design"]',d(20),"p2",'[{"id":"s7","title":"Tokens","done":true}]','[]',d(-10),0,'[]'),
+            ("t8","Testes de Performance","Lighthouse audit completo.","A Fazer","medium","u4",'["dev"]',d(15),"p3",'[]','[]',d(-1),0,'[]'),
         ]
-        c.executemany("INSERT INTO tasks VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", tasks)
+        c.executemany("INSERT INTO tasks VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)", tasks)
 
         events = [
             ("e1","Sprint Planning",d(1)+"T10:00",d(1)+"T11:00","#6366f1","p1","meeting","Planeamento da sprint",'["u1","u2","u3","u4"]',0),

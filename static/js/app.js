@@ -119,8 +119,8 @@ const api = async (url, m="GET", b=null, timeoutMs=15000) => {
       localStorage.removeItem("tf_u");
       localStorage.removeItem("tf_creds");
       S.user = null;
-      document.getElementById("app").style.display = "none";
-      document.getElementById("login-screen").style.display = "flex";
+      document.getElementById("app")?.classList.add("hidden");
+      document.getElementById("login-screen")?.classList.remove("hidden");
       toast("A sessão expirou. Faz login novamente.","w");
       return {error:"Sessão expirada."};
     }
@@ -151,60 +151,40 @@ async function refreshAll(opts={}){
 
 // ── BOOT ──────────────────────────────────────────
 window.addEventListener("DOMContentLoaded", async () => {
-  // SEMPRE mostrar login primeiro — nunca fica tela preta
-  const loginEl = document.getElementById("login-screen");
-  const appEl   = document.getElementById("app");
-  if(loginEl) loginEl.style.display = "flex";
-  if(appEl)   appEl.style.display   = "none";
-
-  // Carregar config com timeout curto (3s)
-  let cfg = {};
-  try {
-    cfg = await Promise.race([
-      api("/api/config"),
-      new Promise((_,r) => setTimeout(()=>r(new Error("timeout")), 3000))
-    ]);
-  } catch(e) { cfg = {}; }
-
-  S.gcid = cfg?.google_client_id || "";
-  S.hasGemini = cfg?.has_gemini || false;
-  initGoogle();
-  updateAIStatus();
-
-  // Token de convite na URL
+  const cfg = await api("/api/config");
+  S.gcid = cfg.google_client_id||""; S.hasGemini = cfg.has_gemini||false;
+  initGoogle(); updateAIStatus();
+  // Verificar se há token de convite na URL
   const hasToken = new URLSearchParams(window.location.search).get("token");
   if(hasToken){ checkInviteToken(); return; }
-
-  // Tentar restaurar sessão
+  // Tentar restaurar sessão do localStorage (persiste entre sessões)
   const saved = localStorage.getItem("tf_u");
   if(saved){
     try {
+      const userData = JSON.parse(saved);
+      // Verificar se a sessão no servidor ainda é válida
       const me = await api("/api/auth/me");
       if(me && me.id){
         S.user = me;
         localStorage.setItem("tf_u", JSON.stringify(me));
         await loadAll(); showApp(); return;
       }
-      // Re-login automático com credenciais guardadas
+      // Sessão expirou — tentar re-login automático com credenciais guardadas
       const creds = localStorage.getItem("tf_creds");
       if(creds){
         const {email, password} = JSON.parse(creds);
         const r = await api("/api/auth/login","POST",{email,password});
-        if(r && r.user){
+        if(r.user){
           S.user = r.user;
           localStorage.setItem("tf_u", JSON.stringify(r.user));
           await loadAll(); showApp(); return;
         }
       }
-    } catch(e) {}
-    // Sessão inválida — limpar
-    localStorage.removeItem("tf_u");
-    localStorage.removeItem("tf_creds");
+      // Não conseguiu re-login — limpar e mostrar login
+      localStorage.removeItem("tf_u");
+      localStorage.removeItem("tf_creds");
+    } catch(e) { localStorage.removeItem("tf_u"); }
   }
-
-  // Garantir que o login está visível
-  if(loginEl) loginEl.style.display = "flex";
-  if(appEl)   appEl.style.display   = "none";
 });
 
 function initGoogle(){
@@ -265,7 +245,8 @@ async function handleGoogleCb(resp){
 
 async function loadAll(){
   try {
-    const results = await Promise.allSettled([
+    // Carregar tudo em paralelo para máxima performance
+    const [tasks, users, projects, events, notes, activity, notifs, cfg] = await Promise.all([
       api("/api/tasks"),
       api("/api/users"),
       api("/api/projects"),
@@ -275,7 +256,6 @@ async function loadAll(){
       api("/api/notifications"),
       api("/api/config"),
     ]);
-    const [tasks, users, projects, events, notes, activity, notifs, cfg] = results.map(r => r.status === "fulfilled" ? r.value : null);
     S.tasks    = Array.isArray(tasks)    ? tasks    : [];
     S.users    = Array.isArray(users)    ? users    : [];
     S.projects = Array.isArray(projects) ? projects : [];
@@ -395,24 +375,21 @@ async function resendCode(){
 async function doLogout(){
   await api("/api/auth/logout","POST");
   localStorage.removeItem("tf_u"); S.user=null;
-  const _a = document.getElementById("app");
-  const _l = document.getElementById("login-screen");
-  if(_a){ _a.style.display="none"; _a.classList.remove("visible"); }
-  if(_l) _l.style.display = "flex";
+  document.getElementById("app").classList.add("hidden");
+  document.getElementById("login-screen").classList.remove("hidden");
   toast("Sessão terminada","i");
 }
 
 function showErr(id,msg){ const e=document.getElementById(id); e.textContent="⚠ "+msg; e.classList.remove("hidden"); setTimeout(()=>e.classList.add("hidden"),4500); }
 
 function showApp(){
-  const loginEl = document.getElementById("login-screen");
-  const appEl   = document.getElementById("app");
-  if(loginEl) loginEl.style.display = "none";
-  if(appEl){ appEl.style.display = "flex"; appEl.classList.add("visible"); }
+  document.getElementById("login-screen").classList.add("hidden");
+  document.getElementById("app").classList.remove("hidden");
   document.querySelectorAll(".view").forEach(v=>v.classList.add("hidden"));
   document.getElementById("v-dashboard").classList.remove("hidden");
   const aiPanel = document.getElementById("ai-panel");
   if(aiPanel) aiPanel.classList.add("closed");
+  // Restaurar estado da sidebar
   if(localStorage.getItem("tf_sb_closed")==="1" && window.innerWidth > 768){
     document.getElementById("sidebar")?.classList.add("closed");
   }
@@ -425,7 +402,6 @@ function showApp(){
   document.querySelector(".sb-a[data-v='dashboard']")?.classList.add("active");
   setTimeout(setupGlobalSearch, 400);
   setTimeout(()=>checkNotifs(), 1000);
-  updateAutomationBadge();
 }
 
 // ─── ONBOARDING ───────────────────────────────
