@@ -89,10 +89,10 @@ def global_rate_limit():
 
 
 # ═══════════════ CONFIG ═══════════════
-GOOGLE_CLIENT_ID = "196981053682-28hre629rjctqs5v977j68u4h9l2aitb.apps.googleusercontent.com"
-GEMINI_KEY       = os.environ.get("GEMINI_API_KEY", "AQ.Ab8RN6Ly9KQJpcmKmSbKe0pP-diTphy1e2WtLG8se0fS7GuiGw")
-SMTP_EMAIL       = "sweetdeus@gmail.com"
-SMTP_PASSWORD    = "nwxogumqsaeetqta"
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "196981053682-28hre629rjctqs5v977j68u4h9l2aitb.apps.googleusercontent.com")
+GEMINI_KEY       = os.environ.get("GEMINI_API_KEY", "")
+SMTP_EMAIL       = os.environ.get("SMTP_EMAIL", "sweetdeus@gmail.com")
+SMTP_PASSWORD    = os.environ.get("SMTP_PASSWORD", "")
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
 VERIFY_CODES = {}
@@ -328,7 +328,7 @@ def map_task(r):
     t["comments"]     = pj(t.get("comments","[]"))
     t["dependencies"] = pj(t.get("dependencies","[]"))
     t["pinned"]       = bool(t.get("pinned",0))
-    t["deadline"]     = t.get("deadline") or ""
+    t["deadline"]     = str(t.get("deadline") or "")
     t["recurrence"]   = t.get("recurrence") or None
     t["recurrenceEnd"]= t.get("recurrence_end") or None
     return t
@@ -763,7 +763,8 @@ def patch_task(tid):
         if recur and t.get("deadline"):
             try:
                 from datetime import timedelta
-                dl = datetime.strptime(t["deadline"], "%Y-%m-%d")
+                dl_raw = t["deadline"]
+                dl = dl_raw if hasattr(dl_raw, 'strftime') else datetime.strptime(str(dl_raw), "%Y-%m-%d")
                 if recur == "daily":      next_dl = dl + timedelta(days=1)
                 elif recur == "weekly":   next_dl = dl + timedelta(weeks=1)
                 elif recur == "biweekly": next_dl = dl + timedelta(weeks=2)
@@ -778,10 +779,10 @@ def patch_task(tid):
                     c2.execute("INSERT INTO tasks VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                         (new_tid, t["title"], t.get("description",""), "A Fazer",
                          t.get("priority","medium"), t.get("assignee",""),
-                         next_dl.strftime("%Y-%m-%d"), t.get("project",""),
-                         json.dumps(t.get("tags",[])), json.dumps([]),
-                         datetime.now().strftime("%Y-%m-%d"), json.dumps([]),
-                         json.dumps([]), 0, recur, recur_end))
+                         json.dumps(t.get("tags",[])), next_dl.strftime("%Y-%m-%d"),
+                         t.get("project",""), json.dumps([]), json.dumps([]),
+                         datetime.now().strftime("%Y-%m-%d"), 0,
+                         json.dumps([]), recur, recur_end))
                     c2.commit(); c2.close()
                     log_activity(cu["id"] if cu else "system", "criou (recorrência)", t["title"], "🔁")
             except Exception as e:
@@ -1251,7 +1252,9 @@ def run_reminders_once():
         conn.close()
         for t in tasks:
             try:
-                dl   = datetime.strptime(t["deadline"], "%Y-%m-%d").date()
+                dl_raw = t["deadline"]
+                if hasattr(dl_raw, 'strftime'): dl = dl_raw
+                else: dl = datetime.strptime(str(dl_raw), "%Y-%m-%d").date()
                 diff = (dl - today).days
                 if diff in [0, 1, 3] and t["assignee"] and t["assignee"] in users:
                     user = users[t["assignee"]]
