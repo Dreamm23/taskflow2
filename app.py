@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import uuid, os, json, random, smtplib, hashlib, hmac
 import psycopg2
 import psycopg2.extras
+from psycopg2 import pool as pg_pool
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
@@ -118,16 +119,26 @@ class PgConn:
         self._conn.commit()
 
     def close(self):
-        self._conn.close()
+        _db_pool.putconn(self._conn)
 
 
-def get_db():
+_db_pool = None
+
+def _init_pool():
+    global _db_pool
     if not DATABASE_URL:
         raise RuntimeError("DATABASE_URL não configurado. Define a variável de ambiente no Railway.")
-    conn = psycopg2.connect(DATABASE_URL)
+    _db_pool = pg_pool.ThreadedConnectionPool(2, 10, DATABASE_URL)
+
+def get_db():
+    if _db_pool is None:
+        _init_pool()
+    conn = _db_pool.getconn()
+    conn.autocommit = False
     return PgConn(conn)
 
 def init_db():
+    _init_pool()
     conn = get_db()
 
     # ── Criar tabelas ────────────────────────────────────────────────────────
