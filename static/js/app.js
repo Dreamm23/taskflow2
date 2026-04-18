@@ -81,7 +81,7 @@ const S = {
   pomMode:"work", pomMin:25, pomSec:0, pomRunning:false, pomTimer:null, pomSessions:0, pomTotal:25*60,
   kf:{ proj:"", assignee:"", priority:"", deadline:"" }, // kanban filters
   notifs:[],
-  dashWidgets: JSON.parse(localStorage.getItem("tf_dash_widgets")||'["stats","charts","streak","weather","projects","activity","pinned","overdue"]'),
+  dashWidgets: JSON.parse(localStorage.getItem("tf_dash_widgets")||'["stats","charts","projects","activity"]'),
 };
 let chatPollInterval = null;
 
@@ -119,12 +119,12 @@ const api = async (url, m="GET", b=null, timeoutMs=15000) => {
       localStorage.removeItem("tf_u");
       localStorage.removeItem("tf_creds");
       S.user = null;
-      document.getElementById("app")?.classList.add("hidden");
-      document.getElementById("login-screen")?.classList.remove("hidden");
+      const _ap8=document.getElementById("app"); if(_ap8){_ap8.classList.add("hidden");_ap8.classList.remove("visible");}
+      const _ls8=document.getElementById("login-screen"); if(_ls8){_ls8.classList.remove("hidden");}
       toast("A sessão expirou. Faz login novamente.","w");
       return {error:"Sessão expirada."};
     }
-    return r.json();
+    return await r.json();
   } catch(e) {
     console.error("API error:", url, e);
     if(e.name==="AbortError")
@@ -144,47 +144,69 @@ async function refreshAll(opts={}){
   if(opts.projects) toFetch.push(api("/api/projects").then(r=>{ if(Array.isArray(r)) S.projects=r; }));
   if(opts.users) toFetch.push(api("/api/users").then(r=>{ if(Array.isArray(r)) S.users=r; }));
   if(opts.notifs) toFetch.push(api("/api/notifications").then(r=>{ if(Array.isArray(r)){ S.notifs=r; updateNotifBadge(); } }));
-  await Promise.all(toFetch);
+  await Promise.allSettled(toFetch);
   updateSB();
   render(S.view);
 }
 
 // ── BOOT ──────────────────────────────────────────
 window.addEventListener("DOMContentLoaded", async () => {
-  const cfg = await api("/api/config");
-  S.gcid = cfg.google_client_id||""; S.hasGemini = cfg.has_gemini||false;
+  // Mostrar login imediatamente — nunca ecrã preto
+  document.getElementById("login-screen")?.classList.remove("hidden");
+  document.getElementById("app")?.classList.remove("hidden");
+  document.getElementById("app")?.classList.remove("visible");
+
+  // Timeout de segurança — força login se o boot travar por mais de 3s
+  window._bootSafe = setTimeout(()=>{
+    if(!S.user){
+      const ls=document.getElementById("login-screen");
+      if(ls) ls.classList.remove("hidden");
+      const ap=document.getElementById("app");
+      if(ap){ ap.classList.remove("visible"); }
+    }
+  }, 3000);
+
+  try {
+    const cfg = await api("/api/config");
+    if(cfg && !cfg.error){
+      S.gcid = cfg.google_client_id||""; S.hasGemini = cfg.has_gemini||false;
+    }
+  } catch(e){ console.warn("[boot] config falhou:", e); }
   initGoogle(); updateAIStatus();
-  // Verificar se há token de convite na URL
+
+  // Verificar token de convite na URL
   const hasToken = new URLSearchParams(window.location.search).get("token");
   if(hasToken){ checkInviteToken(); return; }
-  // Tentar restaurar sessão do localStorage (persiste entre sessões)
+
+  // Tentar restaurar sessão
   const saved = localStorage.getItem("tf_u");
   if(saved){
     try {
-      const userData = JSON.parse(saved);
-      // Verificar se a sessão no servidor ainda é válida
       const me = await api("/api/auth/me");
-      if(me && me.id){
+      if(me && me.id && !me.error){
         S.user = me;
         localStorage.setItem("tf_u", JSON.stringify(me));
         await loadAll(); showApp(); return;
       }
-      // Sessão expirou — tentar re-login automático com credenciais guardadas
       const creds = localStorage.getItem("tf_creds");
       if(creds){
         const {email, password} = JSON.parse(creds);
         const r = await api("/api/auth/login","POST",{email,password});
-        if(r.user){
+        if(r && r.user){
           S.user = r.user;
           localStorage.setItem("tf_u", JSON.stringify(r.user));
           await loadAll(); showApp(); return;
         }
       }
-      // Não conseguiu re-login — limpar e mostrar login
       localStorage.removeItem("tf_u");
       localStorage.removeItem("tf_creds");
-    } catch(e) { localStorage.removeItem("tf_u"); }
+    } catch(e) {
+      console.warn("[boot] sessão inválida:", e);
+      localStorage.removeItem("tf_u");
+    }
   }
+  // Garantir que login está visível
+  document.getElementById("login-screen")?.classList.remove("hidden");
 });
 
 function initGoogle(){
@@ -245,8 +267,7 @@ async function handleGoogleCb(resp){
 
 async function loadAll(){
   try {
-    // Carregar tudo em paralelo para máxima performance
-    const [tasks, users, projects, events, notes, activity, notifs, cfg] = await Promise.all([
+    const results = await Promise.allSettled([
       api("/api/tasks"),
       api("/api/users"),
       api("/api/projects"),
@@ -256,6 +277,7 @@ async function loadAll(){
       api("/api/notifications"),
       api("/api/config"),
     ]);
+    const [tasks,users,projects,events,notes,activity,notifs,cfg] = results.map(r=>r.status==="fulfilled"?r.value:null);
     S.tasks    = Array.isArray(tasks)    ? tasks    : [];
     S.users    = Array.isArray(users)    ? users    : [];
     S.projects = Array.isArray(projects) ? projects : [];
@@ -267,7 +289,6 @@ async function loadAll(){
     if(cfg && !cfg.error){ S.hasGemini=cfg.has_gemini; updateAIStatus(); }
   } catch(e) {
     console.error("[loadAll] Erro:", e);
-    toast("Erro ao carregar dados. Recarrega a página.","e");
   }
 }
 
@@ -277,8 +298,8 @@ async function checkNotifs(){
     if(!Array.isArray(n)) return;
     S.notifs = n;
     updateNotifBadge();
-  } catch(e) {}
-  renderNotifList(n);
+    renderNotifList(n);
+  } catch(e){ console.warn("[checkNotifs]", e); }
 }
 
 function updateAIStatus(){
@@ -375,16 +396,19 @@ async function resendCode(){
 async function doLogout(){
   await api("/api/auth/logout","POST");
   localStorage.removeItem("tf_u"); S.user=null;
-  document.getElementById("app").classList.add("hidden");
-  document.getElementById("login-screen").classList.remove("hidden");
+  const _ap=document.getElementById("app"); if(_ap){_ap.classList.add("hidden");_ap.classList.remove("visible");}
+  const _ls=document.getElementById("login-screen"); if(_ls){_ls.classList.remove("hidden");}
   toast("Sessão terminada","i");
 }
 
 function showErr(id,msg){ const e=document.getElementById(id); e.textContent="⚠ "+msg; e.classList.remove("hidden"); setTimeout(()=>e.classList.add("hidden"),4500); }
 
 function showApp(){
-  document.getElementById("login-screen").classList.add("hidden");
-  document.getElementById("app").classList.remove("hidden");
+  clearTimeout(window._bootSafe);
+  const ls = document.getElementById("login-screen");
+  const ap = document.getElementById("app");
+  if(ls){ ls.classList.add("hidden"); }
+  if(ap){ ap.classList.remove("hidden"); ap.classList.add("visible"); }
   document.querySelectorAll(".view").forEach(v=>v.classList.add("hidden"));
   document.getElementById("v-dashboard").classList.remove("hidden");
   const aiPanel = document.getElementById("ai-panel");
@@ -826,7 +850,7 @@ function renderSBProjs(){
   });
 }
 
-function filterProj(pid){ S.search="proj:"+pid; nav("kanban"); }
+function filterProj(pid){ S.kf.proj=pid; S.kf.assignee=""; S.kf.priority=""; S.kf.deadline=""; S.search=""; nav("kanban"); }
 
 // ── NAV ───────────────────────────────────────────
 const VTITLES={dashboard:"Dashboard",kanban:"Kanban",calendar:"Calendário",notes:"Notas",team:"Equipa",reports:"Relatórios",gantt:"Timeline",automations:"Automações",settings:"Definições",chat:"Chat"};
@@ -915,26 +939,29 @@ function renderDash(){
   const projR=activeProjects.map(p=>{
     const pt=tasks.filter(t=>t.project===p.id), d=pt.filter(t=>t.status==="Concluído").length;
     const pct=pt.length?Math.round(d/pt.length*100):0;
-    return`<div class="proj-r" onclick="filterProj('${p.id}')" style="cursor:pointer">
-      <div class="proj-ico" style="background:${p.color}18">${p.icon}</div>
+    return`<div class="db-proj" onclick="filterProj('${p.id}')" style="cursor:pointer">
+      <div class="db-proj-ico" style="background:${p.color}18">${p.icon}</div>
       <div style="flex:1;min-width:0">
-        <div class="proj-rname">${p.name}</div>
-        <div style="margin-top:5px"><div class="prog"><div class="prog-fill" style="width:${pct}%;background:${p.color}"></div></div></div>
-        <div class="proj-rsub">${d}/${pt.length} tarefas · ${pct}%</div>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:7px">
+          <span class="db-proj-name">${p.name}</span>
+          <span style="font-size:11px;font-weight:600;font-family:var(--mono);color:${p.color};flex-shrink:0;margin-left:8px">${pct}%</span>
+        </div>
+        <div class="db-bar"><div class="db-bar-fill" style="width:${pct}%;--c:${p.color}"></div></div>
+        <div style="font-size:11px;color:#30304a;margin-top:5px">${d}/${pt.length} concluídas</div>
       </div>
-      <div class="proj-pct" style="color:${p.color}">${pct}%</div>
     </div>`;
   }).join("");
 
-  const actH=S.activity.slice(0,8).map(a=>{
+  const actH=S.activity.slice(0,6).map(a=>{
     const u=S.users.find(x=>x.id===a.user);
-    return`<div class="act-r">
-      <div class="av sm" style="background:${u?.color||"#666"}">${u?.avatar||"?"}</div>
-      <div style="flex:1;min-width:0">
-        <div class="act-txt"><span class="hn">${u?.name?.split(" ")[0]||"?"}</span> <span style="color:var(--t2)">${a.action}</span> <span class="ht">"${a.target}"</span></div>
-        <div class="act-time">${a.time} atrás</div>
+    return`<div class="db-act">
+      <div class="av sm" style="background:${u?.color||"#555"}">${u?.avatar||"?"}</div>
+      <div class="db-act-body">
+        <span class="db-act-who">${u?.name?.split(" ")[0]||"?"}</span>
+        <span class="db-act-verb">${a.action}</span>
+        <span class="db-act-target">${a.target}</span>
       </div>
-      <div class="act-ico">${a.icon}</div>
+      <span class="db-act-when">${a.time}</span>
     </div>`;
   }).join("");
 
@@ -958,156 +985,193 @@ function renderDash(){
 
   const WIDGETS = {
     stats: {
-      label:"📊 Estatísticas", html:`
-      <div class="stats-row">
-        ${[
-          {l:"Total de Tarefas", v:total, i:"📋", b:S.projects.length+" projetos", bc:"badge-neu", s:"s1", c:"#6366f1"},
-          {l:"Concluídas",       v:done,  i:"✅", b:rate+"%",                      bc:"badge-ok",  s:"s2", c:"#22c55e"},
-          {l:"Em Progresso",    v:inp,   i:"⚡", b:"ativas",                       bc:"badge-neu", s:"s3", c:"#f59e0b"},
-          {l:"Em Atraso",       v:overdue,i:"🚨",b:overdue>0?"atenção":"em dia",  bc:overdue>0?"badge-err":"badge-ok", s:"s4", c:overdue>0?"#ef4444":"#22c55e"},
-        ].map(s=>`<div class="stat-card ${s.s}">
-          <div class="stat-top">
-            <div style="width:38px;height:38px;border-radius:10px;background:${s.c}18;display:flex;align-items:center;justify-content:center;font-size:18px">${s.i}</div>
-            <span class="stat-badge ${s.bc}">${s.b}</span>
+      label:"Estatísticas", html:`
+      <div class="db-hero">
+        <div class="db-nums">
+          <div class="db-num">
+            <div class="db-n">${total}</div>
+            <div class="db-l">Total</div>
           </div>
-          <div class="stat-num" style="color:${s.c}">${s.v}</div>
-          <div class="stat-lbl">${s.l}</div>
-        </div>`).join("")}
+          <div class="db-ndiv"></div>
+          <div class="db-num">
+            <div class="db-n" style="color:#22c55e">${done}</div>
+            <div class="db-l">Feitas</div>
+          </div>
+          <div class="db-ndiv"></div>
+          <div class="db-num">
+            <div class="db-n" style="color:#6366f1">${inp}</div>
+            <div class="db-l">Em curso</div>
+          </div>
+          <div class="db-ndiv"></div>
+          <div class="db-num">
+            <div class="db-n" style="color:${overdue>0?"#ef4444":"#252540"}">${overdue}</div>
+            <div class="db-l">Atraso</div>
+          </div>
+        </div>
+        <div class="db-prog-row">
+          <div class="db-prog-track">
+            <div style="width:${rate}%;background:linear-gradient(90deg,#6366f1,#818cf8);height:100%;border-radius:3px;transition:width .6s ease"></div>
+          </div>
+          <span class="db-prog-pct">${rate}% · ${activeProjects.length} projeto${activeProjects.length!==1?"s":""}</span>
+        </div>
       </div>`
     },
     charts: {
-      label:"📈 Gráficos", html:`
-      <div style="display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:16px;margin-bottom:4px">
-        <div class="card">
-          <div class="shd" style="margin-bottom:16px">
-            <div class="stitle">Progresso Semanal</div>
-            <div style="font-size:11px;color:var(--t3);font-family:var(--mono)">${new Date().toLocaleDateString("pt-PT",{month:"long",year:"numeric"})}</div>
-          </div>
-          <div style="position:relative;height:160px;overflow:hidden"><canvas id="chart-weekly"></canvas></div>
+      label:"Gráficos", html:`
+      <div class="db-card">
+        <div class="db-card-head">
+          <span class="db-card-title">Esta semana</span>
+          <span class="db-card-sub">${new Date().toLocaleDateString("pt-PT",{month:"long",year:"numeric"})}</span>
         </div>
-        <div class="card">
-          <div class="shd" style="margin-bottom:16px"><div class="stitle">Por Estado</div></div>
-          <div style="position:relative;height:160px;overflow:hidden"><canvas id="chart-status"></canvas></div>
-        </div>
-      </div>`
+        <div style="padding:16px 24px 22px;position:relative;height:150px"><canvas id="chart-weekly"></canvas></div>
+      </div>
+      <canvas id="chart-status" style="display:none;position:absolute;pointer-events:none;opacity:0"></canvas>`
     },
     streak: {
-      label:"🔥 Streak", html:`
-      <div class="card" style="margin-bottom:4px">
-        <div class="shd" style="margin-bottom:14px">
-          <div class="stitle">🔥 Produtividade Pessoal</div>
-          <span style="font-size:11px;color:var(--t3)">Últimos 30 dias</span>
+      label:"Produtividade", html:`
+      <div class="db-card">
+        <div class="db-card-head">
+          <span class="db-card-title">Produtividade</span>
+          <span class="db-card-sub">30 dias</span>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">
-          <div style="text-align:center;padding:12px;background:var(--bg3);border-radius:10px">
-            <div style="font-size:32px;font-weight:800;color:${streakData.current>0?"#f59e0b":"var(--t3)"}">${streakData.current}</div>
-            <div style="font-size:11px;color:var(--t3);margin-top:3px">🔥 Streak atual</div>
+        <div class="db-card-body">
+          <div style="display:flex;gap:10px;margin-bottom:18px">
+            <div class="db-streak-box">
+              <div class="db-streak-n" style="color:${streakData.current>0?"#f59e0b":"#252540"}">${streakData.current}</div>
+              <div class="db-streak-l">Streak</div>
+            </div>
+            <div class="db-streak-box">
+              <div class="db-streak-n" style="color:#6366f1">${streakData.best}</div>
+              <div class="db-streak-l">Melhor</div>
+            </div>
+            <div class="db-streak-box">
+              <div class="db-streak-n" style="color:#22c55e">${streakData.totalDone}</div>
+              <div class="db-streak-l">Total</div>
+            </div>
           </div>
-          <div style="text-align:center;padding:12px;background:var(--bg3);border-radius:10px">
-            <div style="font-size:32px;font-weight:800;color:var(--a)">${streakData.best}</div>
-            <div style="font-size:11px;color:var(--t3);margin-top:3px">⭐ Melhor streak</div>
-          </div>
-          <div style="text-align:center;padding:12px;background:var(--bg3);border-radius:10px">
-            <div style="font-size:32px;font-weight:800;color:var(--ok)">${streakData.totalDone}</div>
-            <div style="font-size:11px;color:var(--t3);margin-top:3px">✅ Total concluídas</div>
+          <div style="font-size:10px;color:#252540;font-family:var(--mono);margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em">Últimos 30 dias</div>
+          <div style="display:flex;gap:3px;flex-wrap:wrap">
+            ${streakData.heatmap.map(d=>`<div title="${d.date}: ${d.count}" style="width:13px;height:13px;border-radius:3px;background:${d.count===0?"rgba(255,255,255,0.03)":d.count===1?"rgba(99,102,241,.22)":d.count<=3?"rgba(99,102,241,.5)":"rgba(99,102,241,.85)"}"></div>`).join("")}
           </div>
         </div>
-        <div style="margin-bottom:8px;font-size:11.5px;color:var(--t3)">Atividade nos últimos 30 dias</div>
-        <div style="display:flex;gap:3px;flex-wrap:wrap">
-          ${streakData.heatmap.map(d=>`
-            <div title="${d.date}: ${d.count} tarefa${d.count!==1?"s":""}" style="width:14px;height:14px;border-radius:3px;background:${d.count===0?"var(--bg3)":d.count===1?"rgba(99,102,241,.35)":d.count<=3?"rgba(99,102,241,.6)":"rgba(99,102,241,.9)"};cursor:default"></div>
-          `).join("")}
-        </div>
-        ${streakData.current>0?`<div style="margin-top:12px;font-size:12.5px;color:#f59e0b;font-weight:600">🔥 Estás em chamas! ${streakData.current} dia${streakData.current>1?"s":""} consecutivo${streakData.current>1?"s":""} com tarefas concluídas!</div>`
-        :`<div style="margin-top:12px;font-size:12.5px;color:var(--t3)">Conclui uma tarefa hoje para iniciar o teu streak! 💪</div>`}
       </div>`
     },
     weather: {
-      label:"🌤️ Clima", html: weatherHtml
+      label:"Clima", html: weatherHtml
     },
     projects: {
-      label:"📁 Projetos", html:`
-      <div class="card" style="margin-bottom:4px">
-        <div class="shd"><div class="stitle">Projetos</div>${S.user?.role==="admin"||S.user?.role==="manager"?`<button class="btn-ghost" style="padding:5px 12px;font-size:12px" onclick="openProjectTemplates()">+ Novo</button>`:""}</div>
-        ${projR||`<div class="empty-st" style="padding:16px"><div class="empty-t">Sem projetos ativos</div></div>`}
+      label:"Projetos", html:`
+      <div class="db-card">
+        <div class="db-card-head">
+          <span class="db-card-title">Projetos</span>
+          ${S.user?.role==="admin"||S.user?.role==="manager"?`<button class="btn-ghost" style="padding:3px 9px;font-size:11px;border-radius:6px" onclick="openProjectTemplates()">+ Novo</button>`:""}
+        </div>
+        <div class="db-card-body">
+          ${projR||`<div style="padding:16px 0;text-align:center;font-size:12px;color:#252540">Sem projetos ativos</div>`}
+        </div>
       </div>`
     },
     activity: {
-      label:"🕐 Atividade", html:`
-      <div class="card" style="margin-bottom:4px">
-        <div class="shd"><div class="stitle">Atividade da Equipa</div></div>
-        ${actH||`<div class="empty-st" style="padding:20px"><div class="empty-i" style="font-size:24px">📋</div><div class="empty-t">Sem atividade recente</div></div>`}
+      label:"Atividade", html:`
+      <div class="db-card">
+        <div class="db-card-head">
+          <span class="db-card-title">Atividade recente</span>
+        </div>
+        <div class="db-card-body">
+          ${actH||`<div style="padding:16px 0;text-align:center;font-size:12px;color:#252540">Sem atividade recente</div>`}
+        </div>
       </div>`
     },
     pinned: {
-      label:"📌 Tarefas Fixadas", html: pinnedTasks.length ? `
-      <div class="card" style="margin-bottom:4px">
-        <div class="shd"><div class="stitle">📌 Tarefas Fixadas</div></div>
-        ${pinnedTasks.map(t=>{
-          const u=S.users.find(x=>x.id===t.assignee);
-          const dl=dleft(t.deadline);
-          return`<div class="proj-r" onclick="openDetail('${t.id}')" style="cursor:pointer">
-            <div style="width:3px;height:36px;border-radius:2px;background:${PRIO[t.priority]?.c};flex-shrink:0"></div>
-            <div style="flex:1;min-width:0">
-              <div class="proj-rname">${t.title}</div>
-              <div class="proj-rsub">${PRIO[t.priority]?.l}${t.deadline?` · ${dl===0?"Hoje":dl<0?Math.abs(dl)+"d atraso":dl+"d"}`:""}</div>
-            </div>
-            ${u?`<div class="av sm" style="background:${u.color}">${u.avatar}</div>`:""}
-          </div>`;
-        }).join("")}
+      label:"Tarefas Fixadas", html: pinnedTasks.length ? `
+      <div class="db-card">
+        <div class="db-card-head">
+          <span class="db-card-title">Fixadas</span>
+          <span style="font-size:10px;color:#252540;font-family:var(--mono)">${pinnedTasks.length}</span>
+        </div>
+        <div class="db-card-body">
+          ${pinnedTasks.map(t=>{
+            const u=S.users.find(x=>x.id===t.assignee);
+            const dl=dleft(t.deadline);
+            return`<div class="db-proj" onclick="openDetail('${t.id}')" style="cursor:pointer">
+              <div style="width:2px;height:28px;border-radius:1px;background:${PRIO[t.priority]?.c};flex-shrink:0;align-self:center"></div>
+              <div style="flex:1;min-width:0">
+                <div class="db-proj-name">${t.title}</div>
+                <div style="font-size:11px;color:#30304a;margin-top:3px">${PRIO[t.priority]?.l}${t.deadline?` · ${dl===0?"Hoje":dl<0?Math.abs(dl)+"d atraso":dl+"d"}`:""}</div>
+              </div>
+              ${u?`<div class="av sm" style="background:${u.color}">${u.avatar}</div>`:""}
+            </div>`;
+          }).join("")}
+        </div>
       </div>` : ""
     },
     overdue: {
-      label:"🚨 Em Atraso", html: overdueTasks.length ? `
-      <div class="card" style="margin-bottom:4px;border-color:rgba(239,68,68,.3)">
-        <div class="shd"><div class="stitle" style="color:var(--err)">🚨 Em Atraso</div><span style="font-size:11px;color:var(--err)">${overdueTasks.length} tarefa${overdueTasks.length>1?"s":""}</span></div>
-        ${overdueTasks.map(t=>{
-          const dl=dleft(t.deadline);
-          const u=S.users.find(x=>x.id===t.assignee);
-          return`<div class="proj-r" onclick="openDetail('${t.id}')" style="cursor:pointer">
-            <div style="width:3px;height:36px;border-radius:2px;background:var(--err);flex-shrink:0"></div>
-            <div style="flex:1;min-width:0">
-              <div class="proj-rname">${t.title}</div>
-              <div class="proj-rsub" style="color:var(--err)">${Math.abs(dl)} dias em atraso</div>
-            </div>
-            ${u?`<div class="av sm" style="background:${u.color}">${u.avatar}</div>`:""}
-          </div>`;
-        }).join("")}
+      label:"Em Atraso", html: overdueTasks.length ? `
+      <div class="db-card" style="border-color:rgba(239,68,68,.15)">
+        <div class="db-card-head">
+          <span class="db-card-title" style="color:#ef4444">Em Atraso</span>
+          <span style="font-size:10px;color:#ef4444;font-family:var(--mono);background:rgba(239,68,68,.08);padding:2px 7px;border-radius:4px">${overdueTasks.length}</span>
+        </div>
+        <div class="db-card-body">
+          ${overdueTasks.map(t=>{
+            const dl=dleft(t.deadline);
+            const u=S.users.find(x=>x.id===t.assignee);
+            return`<div class="db-proj" onclick="openDetail('${t.id}')" style="cursor:pointer">
+              <div style="width:2px;height:28px;border-radius:1px;background:#ef4444;flex-shrink:0;align-self:center"></div>
+              <div style="flex:1;min-width:0">
+                <div class="db-proj-name">${t.title}</div>
+                <div style="font-size:11px;color:rgba(239,68,68,.45);margin-top:3px">${Math.abs(dl)} dias em atraso</div>
+              </div>
+              ${u?`<div class="av sm" style="background:${u.color}">${u.avatar}</div>`:""}
+            </div>`;
+          }).join("")}
+        </div>
       </div>` : ""
     },
   };
 
   const w = S.dashWidgets;
   let html = `
-  <!-- Checklist de setup -->
   ${buildSetupWidget()}
-  <!-- Barra de personalização — discreta, só ícone -->
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:28px">
     <div>
-      <div style="font-size:20px;font-weight:800;color:var(--t);letter-spacing:-.3px">Olá, ${S.user?.name?.split(" ")[0]} 👋</div>
-      <div style="font-size:12.5px;color:var(--t3);margin-top:2px">${new Date().toLocaleDateString("pt-PT",{weekday:"long",day:"numeric",month:"long"})}</div>
+      <div style="font-size:22px;font-weight:600;color:#e8e8f8;line-height:1.2">${(()=>{const h=new Date().getHours();const g=h<12?"Bom dia":h<18?"Boa tarde":"Boa noite";return g+", "+(S.user?.name?.split(" ")[0]||"")+".";})()}</div>
+      <div style="font-size:13px;color:#4a4a6a;margin-top:5px">${new Date().toLocaleDateString("pt-PT",{weekday:"long",day:"numeric",month:"long"})}</div>
     </div>
     <div style="position:relative">
-      <button id="dash-customize-btn" onclick="toggleDashCustomize()" title="Personalizar dashboard" style="background:var(--bg3);border:1px solid var(--b1);border-radius:10px;padding:7px 12px;cursor:pointer;font-size:12px;color:var(--t3);display:flex;align-items:center;gap:6px;transition:all .15s" onmouseenter="this.style.borderColor='var(--b2)';this.style.color='var(--t)'" onmouseleave="this.style.borderColor='var(--b1)';this.style.color='var(--t3)'">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+      <button id="dash-customize-btn" onclick="toggleDashCustomize()" title="Personalizar dashboard" style="background:transparent;border:1px solid rgba(255,255,255,0.07);border-radius:8px;padding:6px 11px;cursor:pointer;font-size:11px;color:#4a4a6a;display:flex;align-items:center;gap:5px;transition:all .15s" onmouseenter="this.style.background='rgba(255,255,255,0.04)';this.style.color='#8888aa'" onmouseleave="this.style.background='transparent';this.style.color='#4a4a6a'">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
         Personalizar
       </button>
-      <div id="dash-customize-panel" style="display:none;position:absolute;right:0;top:calc(100% + 8px);background:var(--bg2);border:1px solid var(--b1);border-radius:14px;padding:14px;min-width:220px;z-index:100;box-shadow:var(--shadow)">
-        <div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Widgets visíveis</div>
+      <div id="dash-customize-panel" style="display:none;position:absolute;right:0;top:calc(100% + 8px);background:#0e0e1c;border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:12px;min-width:210px;z-index:100;box-shadow:0 16px 40px rgba(0,0,0,.5)">
+        <div style="font-size:10px;font-weight:600;color:#3a3a5c;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:8px;padding:0 4px">Widgets</div>
         ${Object.entries(WIDGETS).map(([k,v])=>`
-          <div onclick="toggleDashWidget('${k}')" style="display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:8px;cursor:pointer;transition:background .12s" onmouseenter="this.style.background='var(--bg3)'" onmouseleave="this.style.background='transparent'">
-            <div style="width:16px;height:16px;border-radius:4px;border:1.5px solid ${w.includes(k)?"var(--a)":"var(--b2)"};background:${w.includes(k)?"var(--a)":"transparent"};display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .12s">
-              ${w.includes(k)?'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>':""}
+          <div onclick="toggleDashWidget('${k}')" style="display:flex;align-items:center;gap:9px;padding:6px 4px;border-radius:7px;cursor:pointer;transition:background .12s" onmouseenter="this.style.background='rgba(255,255,255,0.04)'" onmouseleave="this.style.background='transparent'">
+            <div style="width:15px;height:15px;border-radius:4px;border:1.5px solid ${w.includes(k)?"#6366f1":"rgba(255,255,255,0.15)"};background:${w.includes(k)?"#6366f1":"transparent"};display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .12s">
+              ${w.includes(k)?'<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>':""}
             </div>
-            <span style="font-size:12.5px;color:${w.includes(k)?"var(--t)":"var(--t3)"}">${v.label}</span>
+            <span style="font-size:12px;color:${w.includes(k)?"#d0d0e8":"#4a4a6a"}">${v.label}</span>
           </div>
         `).join("")}
       </div>
     </div>
   </div>`;
 
-  // Render active widgets
-  w.forEach(wk=>{ if(WIDGETS[wk]?.html) html += `<div style="margin-bottom:14px">${WIDGETS[wk].html}</div>`; });
+  // Stats sempre full-width
+  if(w.includes("stats") && WIDGETS.stats?.html) html += `<div style="margin-bottom:20px">${WIDGETS.stats.html}</div>`;
+
+  // Grelha 2 colunas: esquerda (charts+activity) | direita (projects+pinned+overdue)
+  const leftW  = ["charts","activity"].filter(k=>w.includes(k)&&WIDGETS[k]?.html);
+  const rightW = ["projects","pinned","overdue"].filter(k=>w.includes(k)&&WIDGETS[k]?.html);
+  if(leftW.length || rightW.length){
+    html += `<div class="dash-grid">`;
+    if(leftW.length)  html += `<div class="dash-col-main">${leftW.map(k=>WIDGETS[k].html).join("")}</div>`;
+    if(rightW.length) html += `<div class="dash-col-side">${rightW.map(k=>WIDGETS[k].html).join("")}</div>`;
+    html += `</div>`;
+  }
+
+  // Widgets opcionais full-width (streak, weather)
+  ["streak","weather"].forEach(k=>{ if(w.includes(k)&&WIDGETS[k]?.html) html += `<div style="margin-bottom:16px">${WIDGETS[k].html}</div>`; });
 
   document.getElementById("v-dashboard").innerHTML = html;
   requestAnimationFrame(()=>{
@@ -1298,8 +1362,10 @@ function initCharts(wb, wlabels, tasks){
   if(_chartStatus){ _chartStatus.destroy(); _chartStatus=null; }
 
   const isDark = document.documentElement.getAttribute("data-theme") !== "light";
-  const gridC = isDark ? "rgba(255,255,255,.06)" : "rgba(0,0,0,.06)";
-  const textC = isDark ? "#50507a" : "#9490c0";
+  const gridC = isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.06)";
+  const textC = isDark ? "#4a4a6a" : "#9090b8";
+  const tooltipBg = isDark ? "#13131f" : "#ffffff";
+  const tooltipBorder = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)";
 
   // Weekly bar chart
   const wCtx = document.getElementById("chart-weekly");
@@ -1314,7 +1380,7 @@ function initCharts(wb, wlabels, tasks){
           backgroundColor: wlabels.map((_,i)=>{
             const day = new Date().getDay();
             const todayIdx = day===0?6:day-1;
-            return i===todayIdx ? "#6366f1" : "rgba(99,102,241,.25)";
+            return i===todayIdx ? "#6366f1" : "rgba(99,102,241,0.2)";
           }),
           borderRadius: 6,
           borderSkipped: false,
@@ -1322,7 +1388,14 @@ function initCharts(wb, wlabels, tasks){
       },
       options: {
         responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` ${ctx.raw} tarefas` } } },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: tooltipBg, borderColor: tooltipBorder, borderWidth: 1,
+            titleColor: "#e8e8f8", bodyColor: "#8888aa", padding: 10,
+            callbacks: { label: ctx => ` ${ctx.raw} tarefas` }
+          }
+        },
         scales: {
           x: { grid: { color: gridC }, ticks: { color: textC, font: { size: 10 } } },
           y: { grid: { color: gridC }, ticks: { color: textC, font: { size: 10 }, stepSize: 1 }, beginAtZero: true }
@@ -1976,8 +2049,10 @@ function renderReports(){
 let _chartMember=null, _chartStatusRep=null;
 function initReportCharts(byMem, bySt){
   const isDark = document.documentElement.getAttribute("data-theme")!=="light";
-  const gridColor = isDark?"rgba(255,255,255,.06)":"rgba(0,0,0,.06)";
-  const textColor = isDark?"#8888aa":"#666";
+  const gridColor = isDark?"rgba(255,255,255,0.04)":"rgba(0,0,0,0.06)";
+  const textColor = isDark?"#4a4a6a":"#9090b8";
+  const tipBg = isDark?"#13131f":"#fff";
+  const tipBorder = isDark?"rgba(255,255,255,0.08)":"rgba(0,0,0,0.1)";
   const lang = S.lang||"pt";
 
   if(_chartMember){ _chartMember.destroy(); _chartMember=null; }
@@ -1998,7 +2073,10 @@ function initReportCharts(byMem, bySt){
       },
       options:{
         responsive:true, maintainAspectRatio:false,
-        plugins:{legend:{labels:{color:textColor,font:{size:11}}},tooltip:{mode:"index"}},
+        plugins:{
+          legend:{labels:{color:textColor,font:{size:11}}},
+          tooltip:{mode:"index",backgroundColor:tipBg,borderColor:tipBorder,borderWidth:1,titleColor:"#e8e8f8",bodyColor:"#8888aa"}
+        },
         scales:{
           x:{stacked:true,ticks:{color:textColor,font:{size:11}},grid:{color:gridColor}},
           y:{stacked:true,ticks:{color:textColor,font:{size:11},stepSize:1},grid:{color:gridColor},beginAtZero:true}
@@ -3166,7 +3244,9 @@ function toggleNotif(){ document.getElementById("notif-panel").classList.toggle(
 function closeNotif(){ document.getElementById("notif-panel").classList.add("hidden"); document.getElementById("notif-overlay").classList.add("hidden"); }
 
 function renderNotifList(notifs){
+  notifs = Array.isArray(notifs) ? notifs : (S.notifs||[]);
   const el=document.getElementById("notif-list");
+  if(!el) return;
   if(!notifs.length){el.innerHTML=`<div class="empty-st" style="padding:24px"><div class="empty-i" style="font-size:26px">🔔</div><div class="empty-t">Sem notificações</div></div>`;return;}
   el.innerHTML=notifs.map(n=>`<div class="nitem ${!n.read?"unread":""}">
     <div class="nitem-ico">${{task:"📋",comment:"💬",deadline:"⏰",mention:"@"}[n.type]||"🔔"}</div>
@@ -3871,6 +3951,16 @@ function updateNotifBadge(){
     btn.appendChild(badge);
   }
 }
+
+// Global error handler — garante que o login aparece se o JS crashar
+window.addEventListener("error", (e) => {
+  console.error("[TaskFlow] Uncaught error:", e.message, e.filename, e.lineno);
+  const ap = document.getElementById("app");
+  const ls = document.getElementById("login-screen");
+  if(ap && !ap.classList.contains("visible") && ls && ls.classList.contains("hidden")){
+    ls.classList.remove("hidden");
+  }
+});
 
 // Notifs loaded inside original loadAll via patch below
 

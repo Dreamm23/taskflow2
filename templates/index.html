@@ -15,135 +15,177 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" media="print" onload="this.media='all'"/>
 <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet"/></noscript>
 <script src="https://accounts.google.com/gsi/client" async defer onload="if(window.initGoogle)initGoogle()"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" defer></script>
 <link rel="stylesheet" href="/static/css/style.css"/>
+<style>
+/* Visibilidade base — nunca ecrã preto */
+#login-screen { display:flex !important; }
+#login-screen.hidden { display:none !important; }
+#app { display:none; }
+#app.visible { display:flex !important; }
+#app:not(.hidden):not([style*="none"]).visible { display:flex !important; }
+</style>
 </head>
 <body>
 
 <!-- ████████ LOGIN ████████ -->
 <div id="login-screen">
-  <div class="lg-bg"></div>
 
-  <!-- Logo topo -->
-  <div class="lg-top">
-    <div class="lg-brand">
-      <div class="lg-orb">⚡</div>
+  <!-- Painel esquerdo — só desktop -->
+  <div class="lg-left">
+    <div class="lg-left-inner">
+      <div class="lg-left-logo">
+        <div class="lg-left-orb">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="white"/>
+          </svg>
+        </div>
+        <span class="lg-left-wordmark">TaskFlow</span>
+      </div>
+      <h1 class="lg-left-headline">Gestão de tarefas para equipas que entregam.</h1>
+      <p class="lg-left-sub">Organiza projetos, colabora com a equipa e entrega mais rápido com IA integrada.</p>
+      <div class="lg-features">
+        <div class="lg-feature">
+          <div class="lg-feature-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="1.75"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          </div>
+          <span>Kanban, Calendário e Timeline</span>
+        </div>
+        <div class="lg-feature">
+          <div class="lg-feature-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="1.75"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+          </div>
+          <span>IA Gemini integrada</span>
+        </div>
+        <div class="lg-feature">
+          <div class="lg-feature-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="1.75"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+          <span>Colaboração em equipa</span>
+        </div>
+        <div class="lg-feature">
+          <div class="lg-feature-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="1.75"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          </div>
+          <span>Relatórios e análises</span>
+        </div>
+      </div>
+    </div>
+    <div class="lg-left-footer">TaskFlow v5 · PAP Informática</div>
+  </div>
+
+  <!-- Painel direito — formulário -->
+  <div class="lg-right">
+    <div class="lg-mobile-brand">
+      <div class="lg-left-orb">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="white"/></svg>
+      </div>
       <span>TaskFlow</span>
     </div>
-  </div>
+    <div class="lg-card">
 
-  <!-- Card central -->
-  <div class="lg-card">
-
-    <!-- Título dinâmico -->
-    <div class="lg-head" id="lg-head">
-      <h2>Bem-vindo de volta</h2>
-      <p>Entra na tua conta para continuar</p>
-    </div>
-
-    <!-- Tabs -->
-    <div class="lg-tabs">
-      <button class="lgtab active" onclick="switchTab('in')">Entrar</button>
-      <button class="lgtab" onclick="switchTab('reg')">Criar conta</button>
-    </div>
-
-    <!-- Google Identity Services -->
-    <div id="g_id_onload"
-      data-client_id=""
-      data-callback="handleGoogleCb"
-      data-auto_prompt="false">
-    </div>
-    <div id="google-btn-wrap" style="width:100%;display:flex;justify-content:center;margin-bottom:4px">
-      <div id="g_id_signin"
-        data-type="standard"
-        data-shape="rectangular"
-        data-theme="outline"
-        data-text="continue_with"
-        data-size="large"
-        data-logo_alignment="left"
-        data-width="352">
+      <!-- Título dinâmico -->
+      <div class="lg-head" id="lg-head">
+        <h2>Bem-vindo de volta</h2>
+        <p>Entra na tua conta para continuar</p>
       </div>
-    </div>
 
-    <div class="lg-divider"><span>ou</span></div>
-
-    <!-- Login -->
-    <form id="form-in" onsubmit="doLogin(event)">
-      <div class="lg-field">
-        <label>Email</label>
-        <input id="li-email" type="email" placeholder="o-teu@email.com" required autocomplete="email"/>
+      <!-- Tabs com underline -->
+      <div class="lg-tabs">
+        <button class="lgtab active" onclick="switchTab('in')">Entrar</button>
+        <button class="lgtab" onclick="switchTab('reg')">Criar conta</button>
       </div>
-      <div class="lg-field">
-        <label>Password</label>
-        <div class="lg-pw-wrap">
-          <input id="li-pass" type="password" placeholder="••••••••" required autocomplete="current-password"/>
-          <button type="button" class="lg-eye" onclick="toggleEye('li-pass',this)">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-          </button>
+
+      <!-- Google Identity Services -->
+      <div id="g_id_onload"
+        data-client_id=""
+        data-callback="handleGoogleCb"
+        data-auto_prompt="false">
+      </div>
+      <div id="google-btn-wrap" style="width:100%;display:flex;justify-content:center;margin-bottom:4px">
+        <div id="g_id_signin"
+          data-type="standard"
+          data-shape="rectangular"
+          data-theme="outline"
+          data-text="continue_with"
+          data-size="large"
+          data-logo_alignment="left"
+          data-width="352">
         </div>
       </div>
-      <div class="auth-error hidden" id="li-err"></div>
-      <button class="lg-cta" type="submit">Entrar</button>
-    </form>
 
-    <!-- Register -->
-    <form id="form-reg" class="hidden" onsubmit="sendVerifyCode(event)">
-      <div class="lg-field">
-        <label>Nome completo</label>
-        <input id="rg-name" placeholder="O teu nome" required/>
-      </div>
-      <div class="lg-field">
-        <label>Email</label>
-        <input id="rg-email" type="email" placeholder="o-teu@email.com" required/>
-      </div>
-      <div class="lg-field">
-        <label>Password</label>
-        <div class="lg-pw-wrap">
-          <input id="rg-pass" type="password" placeholder="Mínimo 6 caracteres" required/>
-          <button type="button" class="lg-eye" onclick="toggleEye('rg-pass',this)">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-          </button>
+      <div class="lg-divider"><span>ou</span></div>
+
+      <!-- Login -->
+      <form id="form-in" onsubmit="doLogin(event)">
+        <div class="lg-field">
+          <label>Email</label>
+          <input id="li-email" type="email" placeholder="o-teu@email.com" required autocomplete="email"/>
+        </div>
+        <div class="lg-field">
+          <label>Password</label>
+          <div class="lg-pw-wrap">
+            <input id="li-pass" type="password" placeholder="••••••••" required autocomplete="current-password"/>
+            <button type="button" class="lg-eye" onclick="toggleEye('li-pass',this)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="auth-error hidden" id="li-err"></div>
+        <button class="lg-cta" type="submit">Entrar</button>
+      </form>
+
+      <!-- Register -->
+      <form id="form-reg" class="hidden" onsubmit="sendVerifyCode(event)">
+        <div class="lg-field">
+          <label>Nome completo</label>
+          <input id="rg-name" placeholder="O teu nome" required/>
+        </div>
+        <div class="lg-field">
+          <label>Email</label>
+          <input id="rg-email" type="email" placeholder="o-teu@email.com" required/>
+        </div>
+        <div class="lg-field">
+          <label>Password</label>
+          <div class="lg-pw-wrap">
+            <input id="rg-pass" type="password" placeholder="Mínimo 6 caracteres" required/>
+            <button type="button" class="lg-eye" onclick="toggleEye('rg-pass',this)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="auth-error hidden" id="rg-err"></div>
+        <button class="lg-cta" type="submit">Enviar código de verificação</button>
+      </form>
+
+      <!-- Verify -->
+      <div id="form-verify" class="hidden">
+        <div class="lg-verify-icon" style="font-size:36px;text-align:center;margin-bottom:12px">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="1.5"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+        </div>
+        <div class="lg-verify-title">Verifica o teu email</div>
+        <div class="lg-verify-sub">Enviámos um código para<br/><strong id="verify-email-lbl"></strong></div>
+        <div class="lg-field" style="margin-top:20px">
+          <label>Código de 6 dígitos</label>
+          <input id="verify-code" placeholder="000000" maxlength="6"
+            style="text-align:center;font-size:24px;font-weight:700;letter-spacing:8px;font-family:var(--mono)"
+            oninput="this.value=this.value.replace(/[^0-9]/g,'')" autocomplete="one-time-code"/>
+        </div>
+        <div class="auth-error hidden" id="verify-err"></div>
+        <button class="lg-cta" onclick="doVerifyCode()">Verificar e criar conta</button>
+        <div class="lg-verify-links">
+          <button onclick="switchTab('reg')">← Voltar</button>
+          <span>·</span>
+          <button onclick="resendCode()">Reenviar código</button>
         </div>
       </div>
-      <div class="auth-error hidden" id="rg-err"></div>
-      <button class="lg-cta" type="submit">Enviar código de verificação</button>
-    </form>
 
-    <!-- Verify -->
-    <div id="form-verify" class="hidden">
-      <div class="lg-verify-icon">📬</div>
-      <div class="lg-verify-title">Verifica o teu email</div>
-      <div class="lg-verify-sub">Enviámos um código para<br/><strong id="verify-email-lbl"></strong></div>
-      <div class="lg-field" style="margin-top:20px">
-        <label>Código de 6 dígitos</label>
-        <input id="verify-code" placeholder="000000" maxlength="6"
-          style="text-align:center;font-size:24px;font-weight:800;letter-spacing:8px;font-family:var(--mono)"
-          oninput="this.value=this.value.replace(/[^0-9]/g,'')" autocomplete="one-time-code"/>
-      </div>
-      <div class="auth-error hidden" id="verify-err"></div>
-      <button class="lg-cta" onclick="doVerifyCode()">Verificar e criar conta</button>
-      <div class="lg-verify-links">
-        <button onclick="switchTab('reg')">← Voltar</button>
-        <span>·</span>
-        <button onclick="resendCode()">Reenviar código</button>
-      </div>
-    </div>
-
-    <!-- Demo -->
-    <div class="lg-demo" id="lg-demo">
-      <span>Demo:</span>
-      <button onclick="fill('davi.asafe385@gmail.com','admin123')">Admin</button>
-      <button onclick="fill('bruno@taskflow.io','manager123')">Manager</button>
-      <button onclick="fill('carla@taskflow.io','membro123')">Member</button>
     </div>
   </div>
-
-  <!-- Footer -->
-  <div class="lg-footer">TaskFlow v5 · PAP Informática</div>
 </div>
 
 <!-- ████████ APP ████████ -->
-<div id="app" class="hidden">
+<div id="app">
 
   <!-- Mobile overlay -->
   <div id="sb-overlay" onclick="closeMobileSidebar()"></div>
@@ -587,6 +629,6 @@
 <!-- Toasts -->
 <div id="toasts"></div>
 
-<script src="/static/js/app.js"></script>
+<script src="/static/js/app.js" defer></script>
 </body>
 </html>

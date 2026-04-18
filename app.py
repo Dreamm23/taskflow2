@@ -2,13 +2,17 @@ from flask import Flask, render_template, request, jsonify, session
 import threading
 import time
 from datetime import datetime, timedelta
-import uuid, os, json, random, smtplib, sqlite3, hashlib, hmac
+import uuid, os, json, random, smtplib, hashlib, hmac
+import psycopg2
+import psycopg2.extras
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-app = Flask(__name__)
+app = Flask(__name__,
+            template_folder=os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates"),
+            static_folder=os.path.join(os.path.dirname(os.path.abspath(__file__)), "static"))
 app.secret_key = os.environ.get("SECRET_KEY", "taskflow_v8_secret_k3y_2026_xR9#mP2$qN7@wL4")
-app.config["SESSION_COOKIE_SECURE"] = False
+app.config["SESSION_COOKIE_SECURE"] = os.environ.get("FLASK_ENV") == "production"
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["PERMANENT_SESSION_LIFETIME"] = 60 * 60 * 24 * 30  # 30 dias
@@ -86,102 +90,129 @@ def global_rate_limit():
 
 # ═══════════════ CONFIG ═══════════════
 GOOGLE_CLIENT_ID = "196981053682-28hre629rjctqs5v977j68u4h9l2aitb.apps.googleusercontent.com"
-GEMINI_KEY       = os.environ.get("GEMINI_API_KEY", "AIzaSyCi3BjUhAiDcZBz5j38dWy9eF3LnmbXFgI")
+GEMINI_KEY       = os.environ.get("GEMINI_API_KEY", "AQ.Ab8RN6Ly9KQJpcmKmSbKe0pP-diTphy1e2WtLG8se0fS7GuiGw")
 SMTP_EMAIL       = "sweetdeus@gmail.com"
 SMTP_PASSWORD    = "nwxogumqsaeetqta"
-DB_PATH = os.environ.get("DB_PATH", os.path.join(os.path.dirname(__file__), "taskflow.db"))
-# No Railway, definir DB_PATH=/data/taskflow.db e montar volume em /data
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
 VERIFY_CODES = {}
 BASE_URL = os.environ.get("BASE_URL", "http://127.0.0.1:5000")
 
 # ═══════════════ DATABASE ═══════════════
+class PgConn:
+    """Wrapper psycopg2 compatível com a API sqlite3 usada no resto do código."""
+    def __init__(self, conn):
+        self._conn = conn
+
+    def execute(self, sql, params=()):
+        c = self._conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        c.execute(sql.replace('?', '%s'), params or ())
+        return c
+
+    def executemany(self, sql, params_list):
+        c = self._conn.cursor()
+        c.executemany(sql.replace('?', '%s'), params_list)
+        return c
+
+    def commit(self):
+        self._conn.commit()
+
+    def close(self):
+        self._conn.close()
+
+
 def get_db():
-    conn = sqlite3.connect(DB_PATH, timeout=10)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")   # Write-Ahead Logging — melhor performance
-    conn.execute("PRAGMA synchronous=NORMAL") # Mais rápido sem perda de dados
-    conn.execute("PRAGMA cache_size=-20000")  # Cache de 20MB
-    conn.execute("PRAGMA foreign_keys=ON")    # Integridade referencial
-    return conn
+    if not DATABASE_URL:
+        raise RuntimeError("DATABASE_URL não configurado. Define a variável de ambiente no Railway.")
+    conn = psycopg2.connect(DATABASE_URL)
+    return PgConn(conn)
 
 def init_db():
     conn = get_db()
-    c = conn.cursor()
-    c.executescript("""
-    CREATE TABLE IF NOT EXISTS users (
-        id TEXT PRIMARY KEY, name TEXT, email TEXT UNIQUE, password TEXT,
-        role TEXT DEFAULT 'member', avatar TEXT, color TEXT DEFAULT '#6366f1', picture TEXT DEFAULT NULL,
-        bio TEXT DEFAULT '', department TEXT DEFAULT '', phone TEXT DEFAULT '',
-        location TEXT DEFAULT '', online INTEGER DEFAULT 0,
-        joined TEXT, skills TEXT DEFAULT '[]', google_id TEXT, verified INTEGER DEFAULT 1
-    );
-    CREATE TABLE IF NOT EXISTS projects (
-        id TEXT PRIMARY KEY, name TEXT, color TEXT DEFAULT '#6366f1',
-        icon TEXT DEFAULT '📁', description TEXT DEFAULT '',
-        members TEXT DEFAULT '[]', status TEXT DEFAULT 'active',
-        deadline TEXT, created TEXT
-    );
-    CREATE TABLE IF NOT EXISTS tasks (
-        id TEXT PRIMARY KEY, title TEXT, description TEXT DEFAULT '',
-        status TEXT DEFAULT 'A Fazer', priority TEXT DEFAULT 'medium',
-        assignee TEXT, tags TEXT DEFAULT '[]', deadline TEXT, project TEXT,
-        subtasks TEXT DEFAULT '[]', comments TEXT DEFAULT '[]',
-        created TEXT, pinned INTEGER DEFAULT 0,
-        dependencies TEXT DEFAULT '[]'
-    );
-    CREATE TABLE IF NOT EXISTS events (
-        id TEXT PRIMARY KEY, title TEXT, start_time TEXT, end_time TEXT,
-        color TEXT DEFAULT '#6366f1', project TEXT, type TEXT DEFAULT 'meeting',
-        description TEXT DEFAULT '', attendees TEXT DEFAULT '[]', all_day INTEGER DEFAULT 0
-    );
-    CREATE TABLE IF NOT EXISTS notes (
-        id TEXT PRIMARY KEY, user_id TEXT, title TEXT DEFAULT 'Nova Nota',
-        content TEXT DEFAULT '', created TEXT, updated TEXT,
-        color TEXT DEFAULT '#6366f1', pinned INTEGER DEFAULT 0
-    );
-    CREATE TABLE IF NOT EXISTS notifications (
-        id TEXT PRIMARY KEY, user_id TEXT, type TEXT, title TEXT,
-        message TEXT, read INTEGER DEFAULT 0, created TEXT
-    );
-    CREATE TABLE IF NOT EXISTS activity (
-        id TEXT PRIMARY KEY, user_id TEXT, action TEXT, target TEXT,
-        type TEXT, time TEXT, icon TEXT, created TEXT
-    );
-    CREATE TABLE IF NOT EXISTS chat_messages (
-        id TEXT PRIMARY KEY, user_id TEXT, text TEXT,
-        created TEXT, edited INTEGER DEFAULT 0
-    );
-    CREATE TABLE IF NOT EXISTS task_timers (
-        id TEXT PRIMARY KEY, task_id TEXT, user_id TEXT,
-        start_time TEXT, end_time TEXT, duration INTEGER DEFAULT 0, note TEXT DEFAULT ''
-    );
-    CREATE TABLE IF NOT EXISTS task_history (
-        id TEXT PRIMARY KEY, task_id TEXT, user_id TEXT,
-        field TEXT, old_value TEXT, new_value TEXT, created TEXT
-    );
-    CREATE TABLE IF NOT EXISTS task_attachments (
-        id TEXT PRIMARY KEY, task_id TEXT, user_id TEXT,
-        filename TEXT, mimetype TEXT, data TEXT, size INTEGER DEFAULT 0, created TEXT
-    );
-    """)
+
+    # ── Criar tabelas ────────────────────────────────────────────────────────
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id TEXT PRIMARY KEY, name TEXT, email TEXT UNIQUE, password TEXT,
+            role TEXT DEFAULT 'member', avatar TEXT, color TEXT DEFAULT '#6366f1',
+            picture TEXT DEFAULT NULL, bio TEXT DEFAULT '', department TEXT DEFAULT '',
+            phone TEXT DEFAULT '', location TEXT DEFAULT '', online INTEGER DEFAULT 0,
+            joined TEXT, skills TEXT DEFAULT '[]', google_id TEXT, verified INTEGER DEFAULT 1
+        )""")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS projects (
+            id TEXT PRIMARY KEY, name TEXT, color TEXT DEFAULT '#6366f1',
+            icon TEXT DEFAULT '📁', description TEXT DEFAULT '',
+            members TEXT DEFAULT '[]', status TEXT DEFAULT 'active',
+            deadline TEXT, created TEXT
+        )""")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS tasks (
+            id TEXT PRIMARY KEY, title TEXT, description TEXT DEFAULT '',
+            status TEXT DEFAULT 'A Fazer', priority TEXT DEFAULT 'medium',
+            assignee TEXT, tags TEXT DEFAULT '[]', deadline TEXT, project TEXT,
+            subtasks TEXT DEFAULT '[]', comments TEXT DEFAULT '[]',
+            created TEXT, pinned INTEGER DEFAULT 0,
+            dependencies TEXT DEFAULT '[]',
+            recurrence TEXT DEFAULT NULL,
+            recurrence_end TEXT DEFAULT NULL
+        )""")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS events (
+            id TEXT PRIMARY KEY, title TEXT, start_time TEXT, end_time TEXT,
+            color TEXT DEFAULT '#6366f1', project TEXT, type TEXT DEFAULT 'meeting',
+            description TEXT DEFAULT '', attendees TEXT DEFAULT '[]', all_day INTEGER DEFAULT 0
+        )""")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS notes (
+            id TEXT PRIMARY KEY, user_id TEXT, title TEXT DEFAULT 'Nova Nota',
+            content TEXT DEFAULT '', created TEXT, updated TEXT,
+            color TEXT DEFAULT '#6366f1', pinned INTEGER DEFAULT 0
+        )""")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS notifications (
+            id TEXT PRIMARY KEY, user_id TEXT, type TEXT, title TEXT,
+            message TEXT, read INTEGER DEFAULT 0, created TEXT
+        )""")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS activity (
+            id TEXT PRIMARY KEY, user_id TEXT, action TEXT, target TEXT,
+            type TEXT, time TEXT, icon TEXT, created TEXT
+        )""")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS chat_messages (
+            id TEXT PRIMARY KEY, user_id TEXT, text TEXT,
+            created TEXT, edited INTEGER DEFAULT 0
+        )""")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS task_timers (
+            id TEXT PRIMARY KEY, task_id TEXT, user_id TEXT,
+            start_time TEXT, end_time TEXT, duration INTEGER DEFAULT 0, note TEXT DEFAULT ''
+        )""")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS task_history (
+            id TEXT PRIMARY KEY, task_id TEXT, user_id TEXT,
+            field TEXT, old_value TEXT, new_value TEXT, created TEXT
+        )""")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS task_attachments (
+            id TEXT PRIMARY KEY, task_id TEXT, user_id TEXT,
+            filename TEXT, mimetype TEXT, data TEXT, size INTEGER DEFAULT 0, created TEXT
+        )""")
     conn.commit()
 
-    # ── Migrações automáticas (para DBs existentes) ──────────────────────────
+    # ── Migrações (ADD COLUMN IF NOT EXISTS — sintaxe PostgreSQL) ────────────
     migrations = [
-        "ALTER TABLE tasks ADD COLUMN dependencies TEXT DEFAULT '[]'",
-        "ALTER TABLE users ADD COLUMN verified INTEGER DEFAULT 1",
-        "ALTER TABLE projects ADD COLUMN deadline TEXT",
-        "ALTER TABLE tasks ADD COLUMN pinned INTEGER DEFAULT 0",
-    "ALTER TABLE tasks ADD COLUMN recurrence TEXT DEFAULT NULL",
-    "ALTER TABLE tasks ADD COLUMN recurrence_end TEXT DEFAULT NULL",
+        "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS dependencies TEXT DEFAULT '[]'",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS verified INTEGER DEFAULT 1",
+        "ALTER TABLE projects ADD COLUMN IF NOT EXISTS deadline TEXT",
+        "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS pinned INTEGER DEFAULT 0",
+        "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS recurrence TEXT DEFAULT NULL",
+        "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS recurrence_end TEXT DEFAULT NULL",
     ]
     for migration in migrations:
-        try:
-            c.execute(migration)
-            conn.commit()
-        except Exception:
-            pass  # Coluna já existe — ignorar
+        conn.execute(migration)
+    conn.commit()
 
     # ── Índices para melhorar performance ────────────────────────────────────
     indexes = [
@@ -197,16 +228,13 @@ def init_db():
         "CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)",
     ]
     for idx in indexes:
-        try:
-            c.execute(idx)
-        except Exception:
-            pass
+        conn.execute(idx)
     conn.commit()
 
-    # Inserir dados demo se não existirem
+    # ── Inserir dados demo se a DB estiver vazia ──────────────────────────────
     def d(n=0): return (datetime.now()+timedelta(days=n)).strftime("%Y-%m-%d")
 
-    if not c.execute("SELECT id FROM users LIMIT 1").fetchone():
+    if not conn.execute("SELECT id FROM users LIMIT 1").fetchone():
         users = [
             ("u1","Davi Avelino","davi.asafe385@gmail.com","admin123","admin","DA","#6366f1","Admin do TaskFlow","Gestão","","Brasil",0,d(-90),'["Liderança","Tecnologia","Gestão"]',None,1),
             ("u2","Bruno Costa","bruno@taskflow.io","manager123","manager","BC","#8b5cf6","Engineering Manager","Tecnologia","","Porto",0,d(-60),'["Python","React","DevOps"]',None,1),
@@ -214,7 +242,7 @@ def init_db():
             ("u4","David Lopes","david@taskflow.io","membro123","member","DL","#10b981","Full Stack Developer","Tecnologia","","Coimbra",0,d(-30),'["JavaScript","Python"]',None,1),
             ("u5","Eva Rodrigues","eva@taskflow.io","viewer123","viewer","ER","#f59e0b","Stakeholder","Parceiros","","Faro",0,d(-20),'["Marketing"]',None,1),
         ]
-        c.executemany("INSERT INTO users (id,name,email,password,role,avatar,color,bio,department,phone,location,online,joined,skills,google_id,verified) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", users)
+        conn.executemany("INSERT INTO users (id,name,email,password,role,avatar,color,bio,department,phone,location,online,joined,skills,google_id,verified) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", users)
 
         projects = [
             ("p1","TaskFlow App","#6366f1","⚡","Plataforma principal",'["u1","u2","u3","u4"]',"active",d(60),d(-30)),
@@ -222,19 +250,19 @@ def init_db():
             ("p3","Infra & DevOps","#10b981","🔧","Modernização da infra",'["u2","u4"]',"active",d(90),d(-45)),
             ("p4","App Mobile","#f59e0b","📱","Versão mobile",'["u1","u2","u3"]',"planning",d(120),d(-5)),
         ]
-        c.executemany("INSERT INTO projects VALUES (?,?,?,?,?,?,?,?,?)", projects)
+        conn.executemany("INSERT INTO projects VALUES (?,?,?,?,?,?,?,?,?)", projects)
 
         tasks = [
-            ("t1","Redesign da Landing Page","Atualizar visual com novo branding.","Em Progresso","high","u3",'["design","feature"]',d(3),"p1",'[{"id":"s1","title":"Wireframes","done":true},{"id":"s2","title":"Mockup final","done":false}]','[]',d(-5),1,'[]'),
-            ("t2","API de Autenticação JWT","Refresh tokens e 2FA.","A Fazer","high","u4",'["dev","feature"]',d(7),"p1",'[{"id":"s3","title":"Endpoint login","done":false}]','[]',d(-2),0,'[]'),
-            ("t3","Corrigir bug no formulário","Validação falha em Safari.","Revisão","medium","u4",'["bug"]',d(1),"p2",'[{"id":"s4","title":"Reproduzir","done":true}]','[]',d(-8),0,'[]'),
-            ("t4","Documentação da API","Swagger completo.","A Fazer","low","u2",'["docs"]',d(14),"p1",'[]','[]',d(-1),0,'[]'),
-            ("t5","Dashboard Analytics","Métricas em tempo real.","Em Progresso","medium","u4",'["dev"]',d(10),"p1",'[{"id":"s5","title":"Chart.js","done":true}]','[]',d(-3),0,'[]'),
-            ("t6","Setup CI/CD","GitHub Actions automático.","Concluído","high","u2",'["devops"]',d(-2),"p3",'[{"id":"s6","title":"Workflow","done":true}]','[]',d(-15),0,'[]'),
-            ("t7","Design System","Componentes com Storybook.","Em Progresso","high","u3",'["design"]',d(20),"p2",'[{"id":"s7","title":"Tokens","done":true}]','[]',d(-10),0,'[]'),
-            ("t8","Testes de Performance","Lighthouse audit completo.","A Fazer","medium","u4",'["dev"]',d(15),"p3",'[]','[]',d(-1),0,'[]'),
+            ("t1","Redesign da Landing Page","Atualizar visual com novo branding.","Em Progresso","high","u3",'["design","feature"]',d(3),"p1",'[{"id":"s1","title":"Wireframes","done":true},{"id":"s2","title":"Mockup final","done":false}]','[]',d(-5),1,'[]',None,None),
+            ("t2","API de Autenticação JWT","Refresh tokens e 2FA.","A Fazer","high","u4",'["dev","feature"]',d(7),"p1",'[{"id":"s3","title":"Endpoint login","done":false}]','[]',d(-2),0,'[]',None,None),
+            ("t3","Corrigir bug no formulário","Validação falha em Safari.","Revisão","medium","u4",'["bug"]',d(1),"p2",'[{"id":"s4","title":"Reproduzir","done":true}]','[]',d(-8),0,'[]',None,None),
+            ("t4","Documentação da API","Swagger completo.","A Fazer","low","u2",'["docs"]',d(14),"p1",'[]','[]',d(-1),0,'[]',None,None),
+            ("t5","Dashboard Analytics","Métricas em tempo real.","Em Progresso","medium","u4",'["dev"]',d(10),"p1",'[{"id":"s5","title":"Chart.js","done":true}]','[]',d(-3),0,'[]',None,None),
+            ("t6","Setup CI/CD","GitHub Actions automático.","Concluído","high","u2",'["devops"]',d(-2),"p3",'[{"id":"s6","title":"Workflow","done":true}]','[]',d(-15),0,'[]',None,None),
+            ("t7","Design System","Componentes com Storybook.","Em Progresso","high","u3",'["design"]',d(20),"p2",'[{"id":"s7","title":"Tokens","done":true}]','[]',d(-10),0,'[]',None,None),
+            ("t8","Testes de Performance","Lighthouse audit completo.","A Fazer","medium","u4",'["dev"]',d(15),"p3",'[]','[]',d(-1),0,'[]',None,None),
         ]
-        c.executemany("INSERT INTO tasks VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)", tasks)
+        conn.executemany("INSERT INTO tasks VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", tasks)
 
         events = [
             ("e1","Sprint Planning",d(1)+"T10:00",d(1)+"T11:00","#6366f1","p1","meeting","Planeamento da sprint",'["u1","u2","u3","u4"]',0),
@@ -243,7 +271,7 @@ def init_db():
             ("e4","Reunião com Cliente",d(6)+"T10:00",d(6)+"T11:00","#f59e0b","p2","meeting","Apresentação do progresso",'["u1","u2"]',0),
             ("e5","Retrospetiva",d(8)+"T15:00",d(8)+"T16:00","#6366f1","p1","meeting","Sprint retrospetiva",'["u1","u2","u3","u4"]',0),
         ]
-        c.executemany("INSERT INTO events VALUES (?,?,?,?,?,?,?,?,?,?)", events)
+        conn.executemany("INSERT INTO events VALUES (?,?,?,?,?,?,?,?,?,?)", events)
 
         activity = [
             ("a1","u4","moveu para Revisão","Corrigir bug no formulário","task","5 min","🔄",datetime.now().isoformat()),
@@ -251,18 +279,18 @@ def init_db():
             ("a3","u1","criou","Dashboard Analytics","task","2h","✨",datetime.now().isoformat()),
             ("a4","u3","comentou em","Redesign da Landing Page","comment","3h","💬",datetime.now().isoformat()),
         ]
-        c.executemany("INSERT INTO activity VALUES (?,?,?,?,?,?,?,?)", activity)
+        conn.executemany("INSERT INTO activity VALUES (?,?,?,?,?,?,?,?)", activity)
 
         notifications = [
             ("nf1","u1","deadline","Prazo a aproximar","Landing Page termina em 3 dias",0,datetime.now().isoformat()),
             ("nf2","u1","comment","Novo comentário","Carla comentou numa tarefa",0,datetime.now().isoformat()),
         ]
-        c.executemany("INSERT INTO notifications VALUES (?,?,?,?,?,?,?)", notifications)
+        conn.executemany("INSERT INTO notifications VALUES (?,?,?,?,?,?,?)", notifications)
 
         conn.commit()
-        print("✅ Base de dados SQLite criada com dados demo!")
+        print("✅ Base de dados Supabase criada com dados demo!")
     else:
-        print("✅ SQLite carregado!")
+        print("✅ Supabase carregado!")
 
     conn.close()
 
@@ -489,7 +517,7 @@ def verify_code():
     initials="".join(w[0] for w in name.split())[:2].upper()
     colors=["#6366f1","#ec4899","#10b981","#f59e0b","#8b5cf6","#3b82f6"]
     conn=get_db()
-    cnt=conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    cnt=conn.execute("SELECT COUNT(*) as c FROM users").fetchone()["c"]
     color=colors[cnt%len(colors)]
     new_id=uid()
     conn.execute("INSERT INTO users (id,name,email,password,role,avatar,color,bio,department,phone,location,online,joined,skills,google_id,verified) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -575,7 +603,7 @@ def delete_user(i):
     # Admin não pode eliminar-se a si mesmo
     if cu["id"]==i and cu["role"]=="admin":
         conn=get_db()
-        other_admins=conn.execute("SELECT COUNT(*) FROM users WHERE role='admin' AND id!=?",(i,)).fetchone()[0]
+        other_admins=conn.execute("SELECT COUNT(*) as c FROM users WHERE role='admin' AND id!=?",(i,)).fetchone()["c"]
         conn.close()
         if other_admins==0: return jsonify({"error":"Não podes eliminar o único admin"}),400
     conn=get_db()
@@ -671,11 +699,11 @@ def create_task():
     if len(title) > 200: return jsonify({"error":"Título demasiado longo (máx 200 chars)"}),400
     tid=uid(); conn=get_db()
     assignee_id=d.get("assignee","")
-    conn.execute("INSERT INTO tasks VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+    conn.execute("INSERT INTO tasks VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (tid,d.get("title",""),d.get("description",""),d.get("status","A Fazer"),d.get("priority","medium"),
          assignee_id,json.dumps(d.get("tags",[])),d.get("deadline") or None,d.get("project",""),
          json.dumps(d.get("subtasks",[])),json.dumps([]),datetime.now().strftime("%Y-%m-%d"),0,
-         json.dumps(d.get("dependencies",[]))))
+         json.dumps(d.get("dependencies",[])),d.get("recurrence") or None,d.get("recurrenceEnd") or None))
     conn.execute("INSERT INTO activity VALUES (?,?,?,?,?,?,?,?)",
         (uid(),cu["id"],"criou",d.get("title",""),"task","agora","✨",now()))
     # Notificar responsável
@@ -1157,7 +1185,7 @@ def accept_invite():
         conn.close(); return jsonify({"error":"Email já registado"}),400
     initials = "".join(w[0] for w in name.split())[:2].upper()
     colors   = ["#6366f1","#ec4899","#10b981","#f59e0b","#8b5cf6","#3b82f6"]
-    cnt      = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    cnt      = conn.execute("SELECT COUNT(*) as c FROM users").fetchone()["c"]
     new_id   = uid()
     conn.execute("INSERT INTO users (id,name,email,password,role,avatar,color,bio,department,phone,location,online,joined,skills,google_id,verified) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (new_id,name,email,pw,inv["role"],initials,colors[cnt%len(colors)],"","","","",1,datetime.now().strftime("%Y-%m-%d"),"[]",None,1))
@@ -1174,6 +1202,10 @@ def accept_invite():
 @app.route("/join")
 def join_page():
     return render_template("index.html")
+
+@app.route("/health")
+def health():
+    return jsonify({"status":"ok","version":"5"})
 
 
 # ── DEADLINE REMINDERS ──────────────────────────
@@ -1313,7 +1345,7 @@ def timer_stop(tid):
 @app.route("/api/tasks/<tid>/timers", methods=["GET"])
 def get_timers(tid):
     conn=get_db()
-    rows=conn.execute("SELECT * FROM task_timers WHERE task_id=? ORDER BY created DESC",(tid,)).fetchall()
+    rows=conn.execute("SELECT * FROM task_timers WHERE task_id=? ORDER BY start_time DESC",(tid,)).fetchall()
     conn.close()
     return jsonify([dict(r) for r in rows])
 
