@@ -484,7 +484,7 @@ def login():
         return jsonify({"error":"Email ou password incorretos."}),401
     reset_login_limit(email)  # reset contador ao fazer login com sucesso
     u=map_user(row)
-    conn=get_db(); conn.execute("UPDATE users SET online=1 WHERE id=?",(u["id"],)); conn.commit(); conn.close()
+    conn=get_db(); conn.execute("UPDATE users SET online=TRUE WHERE id=?",(u["id"],)); conn.commit(); conn.close()
     session.permanent = True
     session["uid"]=u["id"]; return jsonify({"user":safe(u)})
 
@@ -521,7 +521,7 @@ def verify_code():
     color=colors[cnt%len(colors)]
     new_id=uid()
     conn.execute("INSERT INTO users (id,name,email,password,role,avatar,color,bio,department,phone,location,online,joined,skills,google_id,verified) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        (new_id,name,em,pw,"member",initials,color,"","","","",1,datetime.now().strftime("%Y-%m-%d"),"[]",None,1))
+        (new_id,name,em,pw,"member",initials,color,"","","","",True,datetime.now().strftime("%Y-%m-%d"),"[]",None,True))
     conn.commit()
     row=conn.execute("SELECT * FROM users WHERE id=?",(new_id,)).fetchone()
     conn.close()
@@ -540,12 +540,12 @@ def google_auth():
         row=conn.execute("SELECT * FROM users WHERE email=? OR google_id=?",(email,gid)).fetchone()
         if row:
             u=map_user(row)
-            conn.execute("UPDATE users SET google_id=?,online=1 WHERE id=?",(gid,u["id"])); conn.commit()
+            conn.execute("UPDATE users SET google_id=?,online=TRUE WHERE id=?",(gid,u["id"])); conn.commit()
         else:
             initials="".join(w[0] for w in name.split())[:2].upper()
             new_id=uid()
             conn.execute("INSERT INTO users (id,name,email,password,role,avatar,color,bio,department,phone,location,online,joined,skills,google_id,verified) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                (new_id,name,email,"google_auth","member",initials,"#6366f1","","","","",1,datetime.now().strftime("%Y-%m-%d"),"[]",gid,1))
+                (new_id,name,email,"google_auth","member",initials,"#6366f1","","","","",True,datetime.now().strftime("%Y-%m-%d"),"[]",gid,True))
             conn.commit()
             row=conn.execute("SELECT * FROM users WHERE id=?",(new_id,)).fetchone()
             u=map_user(row)
@@ -563,7 +563,7 @@ def get_me():
 def logout():
     uid_v=session.get("uid")
     if uid_v:
-        conn=get_db(); conn.execute("UPDATE users SET online=0 WHERE id=?",(uid_v,)); conn.commit(); conn.close()
+        conn=get_db(); conn.execute("UPDATE users SET online=FALSE WHERE id=?",(uid_v,)); conn.commit(); conn.close()
     session.clear(); return jsonify({"ok":True})
 
 # ── USERS ──────────────────────────────────────
@@ -1189,7 +1189,7 @@ def accept_invite():
     cnt      = conn.execute("SELECT COUNT(*) as c FROM users").fetchone()["c"]
     new_id   = uid()
     conn.execute("INSERT INTO users (id,name,email,password,role,avatar,color,bio,department,phone,location,online,joined,skills,google_id,verified) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        (new_id,name,email,pw,inv["role"],initials,colors[cnt%len(colors)],"","","","",1,datetime.now().strftime("%Y-%m-%d"),"[]",None,1))
+        (new_id,name,email,pw,inv["role"],initials,colors[cnt%len(colors)],"","","","",True,datetime.now().strftime("%Y-%m-%d"),"[]",None,True))
     conn.execute("INSERT INTO notifications VALUES (?,?,?,?,?,?,?)",
         (uid(),inv["invited_by_id"],"team",f"{name} aceitou o convite!",
          f"{name} juntou-se à equipa via convite.",0,now()))
