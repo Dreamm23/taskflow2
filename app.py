@@ -3,9 +3,15 @@ import threading
 import time
 from datetime import datetime, timedelta
 import uuid, os, json, random, smtplib, hashlib, hmac
-import psycopg2
-import psycopg2.extras
-from psycopg2 import pool as pg_pool
+import sqlite3
+
+try:
+    import psycopg2
+    import psycopg2.extras
+    from psycopg2 import pool as pg_pool
+    _PSYCOPG2_OK = True
+except ImportError:
+    _PSYCOPG2_OK = False
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
@@ -61,11 +67,10 @@ def hash_password(pw):
 
 def check_password(pw, stored):
     """Verificar password — suporta plain text (migração) e hash"""
-    # Se já está em hash (hex de 64 chars) — comparar com hash
     if len(stored) == 64 and all(c in "0123456789abcdef" for c in stored):
         return hmac.compare_digest(hash_password(pw), stored)
-    # Plain text (passwords antigas) — comparar direto + migrar
-    return pw == stored
+    # Plain text legacy (contas demo) — timing-safe comparison
+    return hmac.compare_digest(pw, stored)
 
 # ── SEGURANÇA — Headers HTTP ─────────────────────
 @app.after_request
@@ -100,8 +105,10 @@ VERIFY_CODES = {}
 BASE_URL = os.environ.get("BASE_URL", "http://127.0.0.1:5000")
 
 # ═══════════════ DATABASE ═══════════════
+_USE_SQLITE = not DATABASE_URL  # usa SQLite localmente quando DATABASE_URL não está definido
+
 class PgConn:
-    """Wrapper psycopg2 compatível com a API sqlite3 usada no resto do código."""
+    """Wrapper psycopg2 que expõe a mesma API que SqliteConn."""
     def __init__(self, conn):
         self._conn = conn
 
@@ -122,15 +129,48 @@ class PgConn:
         _db_pool.putconn(self._conn)
 
 
+class SqliteConn:
+    """Wrapper sqlite3 com a mesma API que PgConn — usado para desenvolvimento local."""
+    def __init__(self, conn):
+        self._conn = conn
+
+    def execute(self, sql, params=()):
+        c = self._conn.cursor()
+        # SQLite não suporta "ADD COLUMN IF NOT EXISTS" — tratado em init_db
+        c.execute(sql, params or ())
+        return c
+
+    def executemany(self, sql, params_list):
+        c = self._conn.cursor()
+        c.executemany(sql, params_list)
+        return c
+
+    def commit(self):
+        self._conn.commit()
+
+    def close(self):
+        pass  # SQLite usa ficheiro único, não há pool para devolver
+
+
 _db_pool = None
+_sqlite_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "taskflow.db")
+_sqlite_lock = threading.Lock()
 
 def _init_pool():
     global _db_pool
+    if _USE_SQLITE:
+        return  # SQLite não precisa de pool
     if not DATABASE_URL:
         raise RuntimeError("DATABASE_URL não configurado. Define a variável de ambiente no Railway.")
     _db_pool = pg_pool.ThreadedConnectionPool(2, 10, DATABASE_URL)
 
 def get_db():
+    if _USE_SQLITE:
+        conn = sqlite3.connect(_sqlite_path, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA foreign_keys=ON")
+        return SqliteConn(conn)
     if _db_pool is None:
         _init_pool()
     conn = _db_pool.getconn()
@@ -212,18 +252,35 @@ def init_db():
         )""")
     conn.commit()
 
-    # ── Migrações (ADD COLUMN IF NOT EXISTS — sintaxe PostgreSQL) ────────────
-    migrations = [
-        "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS dependencies TEXT DEFAULT '[]'",
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS verified INTEGER DEFAULT 1",
-        "ALTER TABLE projects ADD COLUMN IF NOT EXISTS deadline TEXT",
-        "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS pinned INTEGER DEFAULT 0",
-        "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS recurrence TEXT DEFAULT NULL",
-        "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS recurrence_end TEXT DEFAULT NULL",
-    ]
-    for migration in migrations:
-        conn.execute(migration)
-    conn.commit()
+    # ── Migrações ────────────────────────────────────────────────────────────
+    if _USE_SQLITE:
+        # SQLite não suporta "ADD COLUMN IF NOT EXISTS" — usa try/except
+        migrations = [
+            "ALTER TABLE tasks ADD COLUMN dependencies TEXT DEFAULT '[]'",
+            "ALTER TABLE users ADD COLUMN verified INTEGER DEFAULT 1",
+            "ALTER TABLE projects ADD COLUMN deadline TEXT",
+            "ALTER TABLE tasks ADD COLUMN pinned INTEGER DEFAULT 0",
+            "ALTER TABLE tasks ADD COLUMN recurrence TEXT DEFAULT NULL",
+            "ALTER TABLE tasks ADD COLUMN recurrence_end TEXT DEFAULT NULL",
+        ]
+        for migration in migrations:
+            try:
+                conn.execute(migration)
+                conn.commit()
+            except Exception:
+                pass  # coluna já existe
+    else:
+        migrations = [
+            "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS dependencies TEXT DEFAULT '[]'",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS verified INTEGER DEFAULT 1",
+            "ALTER TABLE projects ADD COLUMN IF NOT EXISTS deadline TEXT",
+            "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS pinned INTEGER DEFAULT 0",
+            "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS recurrence TEXT DEFAULT NULL",
+            "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS recurrence_end TEXT DEFAULT NULL",
+        ]
+        for migration in migrations:
+            conn.execute(migration)
+        conn.commit()
 
     # ── Índices para melhorar performance ────────────────────────────────────
     indexes = [
@@ -510,9 +567,15 @@ def send_code():
         conn.close(); return jsonify({"error":"Email já registado."}),400
     conn.close()
     code=str(random.randint(100000,999999))
+    # Limpar códigos expirados antes de adicionar novo
+    expired = [k for k,v in VERIFY_CODES.items() if datetime.now()>v["expires"]]
+    for k in expired: del VERIFY_CODES[k]
     VERIFY_CODES[email]={"code":code,"expires":datetime.now()+timedelta(minutes=10),"data":{"name":name,"email":email,"password":pw}}
-    sent=send_code_email(email,name,code)
-    if not sent: print(f"\n⚠️  CÓDIGO PARA {email}: {code}\n")
+    # Enviar email em background para não bloquear o request
+    def _send():
+        sent = send_code_email(email,name,code)
+        if not sent: print(f"\n[VERIFY CODE] {email}: {code}\n")
+    threading.Thread(target=_send, daemon=True).start()
     return jsonify({"ok":True,"message":f"Código enviado para {email}"})
 
 @app.route("/api/auth/register/verify", methods=["POST"])
@@ -658,6 +721,8 @@ def create_project():
 
 @app.route("/api/projects/<pid>", methods=["PATCH"])
 def patch_project(pid):
+    cu=cur()
+    if not cu or cu["role"] not in ["admin","manager"]: return jsonify({"error":"Sem permissão"}),403
     d=request.json; sets=[]; vals=[]
     for k in ["name","color","icon","description","status","deadline"]:
         if k in d: sets.append(f"{k}=?"); vals.append(d[k] or None if k=="deadline" else d[k])
@@ -670,6 +735,8 @@ def patch_project(pid):
 
 @app.route("/api/projects/<pid>", methods=["DELETE"])
 def del_project(pid):
+    cu=cur()
+    if not cu or cu["role"] not in ["admin","manager"]: return jsonify({"error":"Sem permissão"}),403
     conn=get_db(); conn.execute("DELETE FROM tasks WHERE project=?",(pid,)); conn.execute("DELETE FROM projects WHERE id=?",(pid,)); conn.commit(); conn.close()
     return jsonify({"ok":True})
 
@@ -700,6 +767,9 @@ def is_real_email(email):
     domain = email.split("@")[-1].lower()
     return domain not in DEMO_DOMAINS
 
+VALID_STATUSES = {"A Fazer","Em Progresso","Revisão","Concluído"}
+VALID_PRIORITIES = {"high","medium","low"}
+
 @app.route("/api/tasks", methods=["POST"])
 def create_task():
     cu=cur()
@@ -708,10 +778,16 @@ def create_task():
     title = d.get("title","").strip()
     if not title: return jsonify({"error":"Título obrigatório"}),400
     if len(title) > 200: return jsonify({"error":"Título demasiado longo (máx 200 chars)"}),400
+    desc = d.get("description","")
+    if len(desc) > 5000: return jsonify({"error":"Descrição demasiado longa (máx 5000 chars)"}),400
+    status = d.get("status","A Fazer")
+    if status not in VALID_STATUSES: status = "A Fazer"
+    priority = d.get("priority","medium")
+    if priority not in VALID_PRIORITIES: priority = "medium"
     tid=uid(); conn=get_db()
     assignee_id=d.get("assignee","")
     conn.execute("INSERT INTO tasks VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        (tid,d.get("title",""),d.get("description",""),d.get("status","A Fazer"),d.get("priority","medium"),
+        (tid,title,desc,status,priority,
          assignee_id,json.dumps(d.get("tags",[])),d.get("deadline") or None,d.get("project",""),
          json.dumps(d.get("subtasks",[])),json.dumps([]),datetime.now().strftime("%Y-%m-%d"),0,
          json.dumps(d.get("dependencies",[])),d.get("recurrence") or None,d.get("recurrenceEnd") or None))
@@ -781,7 +857,9 @@ def patch_task(tid):
                 elif recur == "biweekly": next_dl = dl + timedelta(weeks=2)
                 elif recur == "monthly":
                     m = dl.month + 1; y = dl.year + (1 if m > 12 else 0); m = m if m<=12 else 1
-                    next_dl = dl.replace(year=y, month=m)
+                    import calendar
+                    max_day = calendar.monthrange(y, m)[1]
+                    next_dl = dl.replace(year=y, month=m, day=min(dl.day, max_day))
                 else: next_dl = None
                 recur_end = t.get("recurrenceEnd")
                 if next_dl and (not recur_end or next_dl.strftime("%Y-%m-%d") <= recur_end):
@@ -803,12 +881,16 @@ def patch_task(tid):
 
 @app.route("/api/tasks/<tid>", methods=["DELETE"])
 def del_task(tid):
+    cu=cur()
+    if not cu: return jsonify({"error":"Não autenticado"}),401
     conn=get_db(); conn.execute("DELETE FROM tasks WHERE id=?",(tid,)); conn.commit(); conn.close()
     return jsonify({"ok":True})
 
 @app.route("/api/tasks/<tid>/comment", methods=["POST"])
 def add_comment(tid):
-    cu=cur(); conn=get_db()
+    cu=cur()
+    if not cu: return jsonify({"error":"Não autenticado"}),401
+    conn=get_db()
     row=conn.execute("SELECT * FROM tasks WHERE id=?",(tid,)).fetchone()
     if not row: conn.close(); return jsonify({"error":"404"}),404
     t=map_task(row)
@@ -856,7 +938,9 @@ def get_events():
 
 @app.route("/api/events", methods=["POST"])
 def create_event():
-    cu=cur(); d=request.json; eid=uid(); conn=get_db()
+    cu=cur()
+    if not cu: return jsonify({"error":"Não autenticado"}),401
+    d=request.json; eid=uid(); conn=get_db()
     conn.execute("INSERT INTO events VALUES (?,?,?,?,?,?,?,?,?,?)",
         (eid,d.get("title",""),d.get("start",""),d.get("end",""),d.get("color","#6366f1"),
          d.get("project",""),d.get("type","meeting"),d.get("description",""),
@@ -867,6 +951,8 @@ def create_event():
 
 @app.route("/api/events/<eid>", methods=["PATCH"])
 def patch_event(eid):
+    cu=cur()
+    if not cu: return jsonify({"error":"Não autenticado"}),401
     d=request.json; sets=[]; vals=[]
     for k in ["title","color","project","type","description"]:
         if k in d: sets.append(f"{k}=?"); vals.append(d[k])
@@ -882,6 +968,8 @@ def patch_event(eid):
 
 @app.route("/api/events/<eid>", methods=["DELETE"])
 def del_event(eid):
+    cu=cur()
+    if not cu: return jsonify({"error":"Não autenticado"}),401
     conn=get_db(); conn.execute("DELETE FROM events WHERE id=?",(eid,)); conn.commit(); conn.close()
     return jsonify({"ok":True})
 
@@ -1375,6 +1463,15 @@ def log_task_change(conn, tid, uid_v, field, old_val, new_val):
     if str(old_val)==str(new_val): return
     conn.execute("INSERT INTO task_history VALUES (?,?,?,?,?,?,?)",
         (uid(),tid,uid_v,field,str(old_val),str(new_val),now()))
+
+def log_activity(user_id, action, target, icon="📌"):
+    try:
+        conn = get_db()
+        conn.execute("INSERT INTO activity VALUES (?,?,?,?,?,?,?,?)",
+            (uid(), user_id, action, target, "task", "agora", icon, now()))
+        conn.commit(); conn.close()
+    except Exception as e:
+        print(f"[activity] Erro: {e}")
 
 # Patch task_patch to log history
 # (injected into patch_task route)
