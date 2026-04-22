@@ -495,44 +495,103 @@
 
 <!-- Nova Tarefa -->
 <div class="mo hidden" id="mo-task" onclick="if(event.target===this)closeMo('mo-task')">
-  <div class="modal">
-    <div class="mhd"><h3>Nova Tarefa</h3><button onclick="closeMo('mo-task')">✕</button></div>
-    <div class="mbody">
-      <div class="fg"><label>Título *</label><input class="fi" id="mt-title" placeholder="Título da tarefa..."/></div>
-      <div class="fg mt10"><label>Descrição</label><textarea class="fi" id="mt-desc" rows="3" placeholder="Detalhes, contexto..."></textarea></div>
-      <div class="frow mt10">
-        <div class="fg"><label>Estado</label><select class="fi" id="mt-status"><option>A Fazer</option><option>Em Progresso</option><option>Revisão</option><option>Concluído</option></select></div>
-        <div class="fg"><label>Prioridade</label><select class="fi" id="mt-prio"><option value="high">🔴 Alta</option><option value="medium" selected>🟡 Média</option><option value="low">🟢 Baixa</option></select></div>
-      </div>
-      <div class="frow mt10">
-        <div class="fg"><label>Responsável</label><select class="fi" id="mt-asgn"></select></div>
-        <div class="fg"><label>Prazo</label><input type="date" class="fi" id="mt-dl"/></div>
-      </div>
-      <div class="fg mt10"><label>Projeto</label><select class="fi" id="mt-proj"></select></div>
-      <div class="fg mt10"><label>Tags</label><div class="tag-pick" id="mt-tags"></div></div>
-      <div class="fg mt10">
-        <label>Subtarefas</label>
-        <div class="sub-adder"><input class="fi" id="mt-sub-i" placeholder="Nova subtarefa..." onkeydown="if(event.key==='Enter')addSub()"/><button class="btn-xs" onclick="addSub()">+</button></div>
-        <div id="mt-subs"></div>
-      </div>
-      <div class="frow mt10">
-        <div class="fg">
-          <label>🔁 Repetição</label>
-          <select class="fi" id="mt-recur" onchange="toggleRecurEnd()">
-            <option value="">Sem repetição</option>
-            <option value="daily">Diariamente</option>
-            <option value="weekly">Semanalmente</option>
-            <option value="biweekly">De 2 em 2 semanas</option>
-            <option value="monthly">Mensalmente</option>
-          </select>
+  <div class="modal ntask-modal">
+    <div class="mhd ntask-hd">
+      <div style="display:flex;align-items:center;gap:13px">
+        <div class="ntask-hd-ico">✨</div>
+        <div>
+          <h3 style="font-size:16px;font-weight:800;letter-spacing:-.3px;line-height:1.2">Nova Tarefa</h3>
+          <span style="font-size:11px;color:var(--t3);margin-top:2px;display:block">Preenche os campos abaixo para criar</span>
         </div>
-        <div class="fg" id="mt-recur-end-wrap" style="display:none">
-          <label>Termina em</label>
-          <input type="date" class="fi" id="mt-recur-end" title="Data em que a repetição termina (opcional)"/>
+      </div>
+      <button class="ntask-close" onclick="closeMo('mo-task')">✕</button>
+    </div>
+    <div class="mbody ntask-body">
+      <!-- Título + Descrição -->
+      <div class="ntask-sec">
+        <div class="fg">
+          <label class="ntask-lbl">Título <span style="color:var(--err)">*</span></label>
+          <input class="fi ntask-title-fi" id="mt-title" placeholder="Nome da tarefa..."/>
+        </div>
+        <div class="fg" style="margin-top:12px">
+          <label class="ntask-lbl">Descrição</label>
+          <textarea class="fi" id="mt-desc" rows="3" style="resize:vertical;min-height:72px" placeholder="Contexto, objetivos, detalhes importantes..."></textarea>
+        </div>
+      </div>
+      <!-- Estado + Prioridade -->
+      <div class="ntask-sec">
+        <div class="ntask-sec-ttl">Classificação</div>
+        <div class="frow">
+          <div class="fg">
+            <label class="ntask-lbl">Estado</label>
+            <select class="fi" id="mt-status"><option>A Fazer</option><option>Em Progresso</option><option>Revisão</option><option>Concluído</option></select>
+          </div>
+          <div class="fg">
+            <label class="ntask-lbl">Prioridade</label>
+            <select class="fi" id="mt-prio"><option value="high">🔴 Alta</option><option value="medium" selected>🟡 Média</option><option value="low">🟢 Baixa</option></select>
+          </div>
+        </div>
+      </div>
+      <!-- Responsável + Prazo -->
+      <div class="ntask-sec">
+        <div class="ntask-sec-ttl">Atribuição</div>
+        <div class="frow">
+          <div class="fg">
+            <label class="ntask-lbl">👤 Responsável</label>
+            <select class="fi" id="mt-asgn"></select>
+          </div>
+          <div class="fg">
+            <label class="ntask-lbl">📅 Prazo</label>
+            <input type="date" class="fi" id="mt-dl"/>
+          </div>
+        </div>
+      </div>
+      <!-- Projeto -->
+      <div class="ntask-sec">
+        <div class="fg">
+          <label class="ntask-lbl">⚡ Projeto</label>
+          <select class="fi" id="mt-proj"></select>
+        </div>
+      </div>
+      <!-- Tags -->
+      <div class="ntask-sec">
+        <div class="fg">
+          <label class="ntask-lbl">🏷️ Tags</label>
+          <div class="tag-pick ntask-tags" id="mt-tags"></div>
+        </div>
+      </div>
+      <!-- Subtarefas -->
+      <div class="ntask-sec">
+        <div class="fg">
+          <label class="ntask-lbl">✅ Subtarefas</label>
+          <div class="sub-adder"><input class="fi" id="mt-sub-i" placeholder="Nova subtarefa..." onkeydown="if(event.key==='Enter')addSub()"/><button class="btn-xs ntask-add-sub" onclick="addSub()">+</button></div>
+          <div id="mt-subs"></div>
+        </div>
+      </div>
+      <!-- Repetição -->
+      <div class="ntask-sec" style="border-bottom:none">
+        <div class="frow">
+          <div class="fg">
+            <label class="ntask-lbl">🔁 Repetição</label>
+            <select class="fi" id="mt-recur" onchange="toggleRecurEnd()">
+              <option value="">Sem repetição</option>
+              <option value="daily">Diariamente</option>
+              <option value="weekly">Semanalmente</option>
+              <option value="biweekly">De 2 em 2 semanas</option>
+              <option value="monthly">Mensalmente</option>
+            </select>
+          </div>
+          <div class="fg" id="mt-recur-end-wrap" style="display:none">
+            <label class="ntask-lbl">Termina em</label>
+            <input type="date" class="fi" id="mt-recur-end" title="Data em que a repetição termina (opcional)"/>
+          </div>
         </div>
       </div>
     </div>
-    <div class="mfoot"><button class="btn-ghost" onclick="closeMo('mo-task')">Cancelar</button><button class="btn-cta" onclick="submitTask()">Criar Tarefa</button></div>
+    <div class="mfoot ntask-ft">
+      <button class="btn-ghost" onclick="closeMo('mo-task')">Cancelar</button>
+      <button class="ntask-create-btn" onclick="submitTask()"><span style="font-size:14px">✨</span> Criar Tarefa</button>
+    </div>
   </div>
 </div>
 

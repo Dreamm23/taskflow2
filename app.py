@@ -86,6 +86,24 @@ def add_security_headers(response):
         response.headers["Pragma"] = "no-cache"
     return response
 
+# ── Handlers de erro — sempre retornam JSON ──────
+@app.errorhandler(Exception)
+def handle_exception(e):
+    import traceback
+    traceback.print_exc()
+    code = getattr(e, 'code', 500)
+    if not isinstance(code, int):
+        code = 500
+    return jsonify({"error": str(e)[:400]}), code
+
+@app.errorhandler(404)
+def handle_404(e):
+    return jsonify({"error": "Não encontrado"}), 404
+
+@app.errorhandler(405)
+def handle_405(e):
+    return jsonify({"error": "Método não permitido"}), 405
+
 # ── SEGURANÇA — Rate limit em todas as rotas ─────
 @app.before_request
 def global_rate_limit():
@@ -535,13 +553,14 @@ def patch_config():
     global GEMINI_KEY
     u=cur()
     if not u or u["role"]!="admin": return jsonify({"error":"Sem permissão"}),403
-    if "gemini_api_key" in request.json: GEMINI_KEY=request.json["gemini_api_key"]
+    d=request.json or {}
+    if "gemini_api_key" in d: GEMINI_KEY=d["gemini_api_key"]
     return jsonify({"ok":True,"has_gemini":bool(GEMINI_KEY)})
 
 # ── AUTH ──────────────────────────────────────
 @app.route("/api/auth/login", methods=["POST"])
 def login():
-    d=request.json; email=d.get("email","").lower().strip(); pw=d.get("password","")
+    d=request.json or {}; email=d.get("email","").lower().strip(); pw=d.get("password","")
     # Rate limit de login — máx 5 tentativas
     ok, msg = check_login_limit(email)
     if not ok: return jsonify({"error":msg}),429
@@ -558,7 +577,7 @@ def login():
 
 @app.route("/api/auth/register/send-code", methods=["POST"])
 def send_code():
-    d=request.json; name=d.get("name","").strip(); email=d.get("email","").lower().strip(); pw=d.get("password","")
+    d=request.json or {}; name=d.get("name","").strip(); email=d.get("email","").lower().strip(); pw=d.get("password","")
     if not name: return jsonify({"error":"Nome obrigatório."}),400
     if "@" not in email: return jsonify({"error":"Email inválido."}),400
     if len(pw)<6: return jsonify({"error":"Mínimo 6 caracteres."}),400
@@ -580,7 +599,7 @@ def send_code():
 
 @app.route("/api/auth/register/verify", methods=["POST"])
 def verify_code():
-    d=request.json; email=d.get("email","").lower().strip(); code=d.get("code","").strip()
+    d=request.json or {}; email=d.get("email","").lower().strip(); code=d.get("code","").strip()
     entry=VERIFY_CODES.get(email)
     if not entry: return jsonify({"error":"Código expirado. Solicita um novo."}),400
     if datetime.now()>entry["expires"]:
@@ -603,7 +622,7 @@ def verify_code():
 
 @app.route("/api/auth/google", methods=["POST"])
 def google_auth():
-    token=request.json.get("credential","")
+    token=(request.json or {}).get("credential","")
     if not token: return jsonify({"error":"Token inválido"}),400
     try:
         import urllib.request as ur
@@ -656,7 +675,7 @@ def patch_user(i):
     cu=cur()
     if not cu: return jsonify({"error":"Não autenticado"}),401
     if cu["id"]!=i and cu["role"]!="admin": return jsonify({"error":"Sem permissão"}),403
-    d=request.json; allowed=["name","bio","department","phone","location","color"]
+    d=request.json or {}; allowed=["name","bio","department","phone","location","color"]
     if cu["role"]=="admin": allowed+=["role"]
     sets=[]; vals=[]
     for k in allowed:
@@ -693,7 +712,7 @@ def delete_user(i):
 def change_pw(i):
     cu=cur()
     if not cu or cu["id"]!=i: return jsonify({"error":"Sem permissão"}),403
-    d=request.json
+    d=request.json or {}
     if not check_password(d.get("current",""), cu["password"]):
         return jsonify({"error":"Password atual incorreta"}),400
     if len(d.get("new",""))<6: return jsonify({"error":"Mínimo 6 caracteres"}),400
@@ -745,8 +764,11 @@ def del_project(pid):
 def get_tasks():
     proj    = request.args.get("project")
     status  = request.args.get("status")
-    limit   = min(int(request.args.get("limit", 200)), 500)  # máx 500
-    offset  = int(request.args.get("offset", 0))
+    try:
+        limit  = min(int(request.args.get("limit", 200)), 500)
+        offset = int(request.args.get("offset", 0))
+    except (ValueError, TypeError):
+        limit, offset = 200, 0
     conn = get_db()
     where, params = [], []
     if proj:   where.append("project=?");  params.append(proj)
@@ -785,31 +807,39 @@ def create_task():
     priority = d.get("priority","medium")
     if priority not in VALID_PRIORITIES: priority = "medium"
     tid=uid(); conn=get_db()
-    assignee_id=d.get("assignee","")
-    conn.execute("INSERT INTO tasks VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        (tid,title,desc,status,priority,
-         assignee_id,json.dumps(d.get("tags",[])),d.get("deadline") or None,d.get("project",""),
-         json.dumps(d.get("subtasks",[])),json.dumps([]),datetime.now().strftime("%Y-%m-%d"),0,
-         json.dumps(d.get("dependencies",[])),d.get("recurrence") or None,d.get("recurrenceEnd") or None))
-    conn.execute("INSERT INTO activity VALUES (?,?,?,?,?,?,?,?)",
-        (uid(),cu["id"],"criou",d.get("title",""),"task","agora","✨",now()))
-    # Notificar responsável
-    if assignee_id and assignee_id != cu["id"]:
-        conn.execute("INSERT INTO notifications VALUES (?,?,?,?,?,?,?)",
-            (uid(),assignee_id,"task","Nova tarefa atribuída",
-             f'{cu["name"]} atribuiu-te "{d.get("title","")}"',0,now()))
-        asgn_row=conn.execute("SELECT * FROM users WHERE id=?",(assignee_id,)).fetchone()
-        if asgn_row:
-            asgn=map_user(asgn_row)
-            if is_real_email(asgn.get("email","")):
-                threading.Thread(target=send_task_email,args=(asgn,d.get("title",""),cu["name"],d.get("deadline",""),d.get("priority","medium")),daemon=True).start()
-    conn.commit()
-    row=conn.execute("SELECT * FROM tasks WHERE id=?",(tid,)).fetchone(); conn.close()
-    return jsonify(map_task(row))
+    try:
+        assignee_id=d.get("assignee","")
+        conn.execute("INSERT INTO tasks(id,title,description,status,priority,assignee,tags,deadline,project,subtasks,comments,created,pinned,dependencies,recurrence,recurrence_end) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (tid,title,desc,status,priority,
+             assignee_id,json.dumps(d.get("tags",[])),d.get("deadline") or None,d.get("project",""),
+             json.dumps(d.get("subtasks",[])),json.dumps([]),datetime.now().strftime("%Y-%m-%d"),0,
+             json.dumps(d.get("dependencies",[])),d.get("recurrence") or None,d.get("recurrenceEnd") or None))
+        conn.execute("INSERT INTO activity VALUES (?,?,?,?,?,?,?,?)",
+            (uid(),cu["id"],"criou",title,"task","agora","✨",now()))
+        if assignee_id and assignee_id != cu["id"]:
+            conn.execute("INSERT INTO notifications VALUES (?,?,?,?,?,?,?)",
+                (uid(),assignee_id,"task","Nova tarefa atribuída",
+                 f'{cu["name"]} atribuiu-te "{title}"',0,now()))
+            asgn_row=conn.execute("SELECT * FROM users WHERE id=?",(assignee_id,)).fetchone()
+            if asgn_row:
+                asgn=map_user(asgn_row)
+                if is_real_email(asgn.get("email","")):
+                    threading.Thread(target=send_task_email,args=(asgn,title,cu["name"],d.get("deadline",""),priority),daemon=True).start()
+        conn.commit()
+        row=conn.execute("SELECT * FROM tasks WHERE id=?",(tid,)).fetchone()
+        conn.close()
+        return jsonify(map_task(row))
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        try: conn.close()
+        except: pass
+        return jsonify({"error": f"Erro ao criar tarefa: {str(e)[:300]}"}), 500
 
 @app.route("/api/tasks/<tid>", methods=["PATCH"])
 def patch_task(tid):
-    cu=cur(); d=request.json; sets=[]; vals=[]
+    cu=cur()
+    if not cu: return jsonify({"error":"Não autenticado"}),401
+    d=request.json or {}; sets=[]; vals=[]
     for k in ["title","description","status","priority","assignee","project"]:
         if k in d: sets.append(f"{k}=?"); vals.append(d[k])
     if "deadline" in d: sets.append("deadline=?"); vals.append(d["deadline"] or None)
@@ -843,6 +873,7 @@ def patch_task(tid):
                     log_task_change(conn,tid,cu["id"],field,old_task[field],d[field])
     conn.execute(f"UPDATE tasks SET {','.join(sets)} WHERE id=?",vals); conn.commit()
     row=conn.execute("SELECT * FROM tasks WHERE id=?",(tid,)).fetchone()
+    if not row: conn.close(); return jsonify({"error":"Tarefa não encontrada"}),404
     # Criar próxima ocorrência se tarefa recorrente foi concluída
     if "status" in d and d["status"] == "Concluído" and row:
         t = map_task(row)
@@ -865,7 +896,7 @@ def patch_task(tid):
                 if next_dl and (not recur_end or next_dl.strftime("%Y-%m-%d") <= recur_end):
                     new_tid = uid()
                     c2 = get_db()
-                    c2.execute("INSERT INTO tasks VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    c2.execute("INSERT INTO tasks(id,title,description,status,priority,assignee,tags,deadline,project,subtasks,comments,created,pinned,dependencies,recurrence,recurrence_end) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                         (new_tid, t["title"], t.get("description",""), "A Fazer",
                          t.get("priority","medium"), t.get("assignee",""),
                          json.dumps(t.get("tags",[])), next_dl.strftime("%Y-%m-%d"),
@@ -894,7 +925,7 @@ def add_comment(tid):
     row=conn.execute("SELECT * FROM tasks WHERE id=?",(tid,)).fetchone()
     if not row: conn.close(); return jsonify({"error":"404"}),404
     t=map_task(row)
-    text=request.json.get("text","")
+    text=(request.json or {}).get("text","")
     c={"id":uid(),"user":cu["id"],"text":text,"created":now()}
     t["comments"].append(c)
     conn.execute("UPDATE tasks SET comments=? WHERE id=?",(json.dumps(t["comments"]),tid))
@@ -915,14 +946,23 @@ def add_comment(tid):
 
 @app.route("/api/tasks/<tid>/comment/<cid>", methods=["DELETE"])
 def del_comment(tid,cid):
+    cu=cur()
+    if not cu: return jsonify({"error":"Não autenticado"}),401
     conn=get_db(); row=conn.execute("SELECT * FROM tasks WHERE id=?",(tid,)).fetchone()
     if row:
-        t=map_task(row); t["comments"]=[c for c in t["comments"] if c["id"]!=cid]
+        t=map_task(row)
+        # Só o autor do comentário ou admin pode apagar
+        comment=next((c for c in t["comments"] if c["id"]==cid),None)
+        if comment and comment.get("user")!=cu["id"] and cu["role"]!="admin":
+            conn.close(); return jsonify({"error":"Sem permissão"}),403
+        t["comments"]=[c for c in t["comments"] if c["id"]!=cid]
         conn.execute("UPDATE tasks SET comments=? WHERE id=?",(json.dumps(t["comments"]),tid)); conn.commit()
     conn.close(); return jsonify({"ok":True})
 
 @app.route("/api/tasks/<tid>/subtask/<sid>", methods=["PATCH"])
 def toggle_sub(tid,sid):
+    cu=cur()
+    if not cu: return jsonify({"error":"Não autenticado"}),401
     conn=get_db(); row=conn.execute("SELECT * FROM tasks WHERE id=?",(tid,)).fetchone()
     if not row: conn.close(); return jsonify({"error":"404"}),404
     t=map_task(row); s=next((x for x in t["subtasks"] if x["id"]==sid),None)
@@ -993,7 +1033,9 @@ def create_note():
 
 @app.route("/api/notes/<nid>", methods=["PATCH"])
 def patch_note(nid):
-    d=request.json; sets=["updated=?"]; vals=[now()]
+    cu=cur()
+    if not cu: return jsonify({"error":"Não autenticado"}),401
+    d=request.json or {}; sets=["updated=?"]; vals=[now()]
     for k in ["title","content","color"]:
         if k in d: sets.append(f"{k}=?"); vals.append(d[k])
     if "pinned" in d: sets.append("pinned=?"); vals.append(1 if d["pinned"] else 0)
@@ -1004,7 +1046,13 @@ def patch_note(nid):
 
 @app.route("/api/notes/<nid>", methods=["DELETE"])
 def del_note(nid):
-    conn=get_db(); conn.execute("DELETE FROM notes WHERE id=?",(nid,)); conn.commit(); conn.close()
+    cu=cur()
+    if not cu: return jsonify({"error":"Não autenticado"}),401
+    conn=get_db()
+    row=conn.execute("SELECT user_id FROM notes WHERE id=?",(nid,)).fetchone()
+    if row and row["user_id"]!=cu["id"] and cu["role"]!="admin":
+        conn.close(); return jsonify({"error":"Sem permissão"}),403
+    conn.execute("DELETE FROM notes WHERE id=?",(nid,)); conn.commit(); conn.close()
     return jsonify({"ok":True})
 
 # ── NOTIFICATIONS ──────────────────────────────
@@ -1172,8 +1220,7 @@ def upload_picture(i):
     cu=cur()
     if not cu: return jsonify({"error":"Não autenticado"}),401
     if cu["id"]!=i and cu["role"]!="admin": return jsonify({"error":"Sem permissão"}),403
-    import base64
-    data = request.json.get("data","")
+    data = (request.json or {}).get("data","")
     if not data: return jsonify({"error":"Sem imagem"}),400
     # Store as base64 data URL (max ~500KB)
     if len(data) > 700000: return jsonify({"error":"Imagem muito grande. Máximo 500KB."}),400
@@ -1239,8 +1286,9 @@ def send_invite_email(to_email, invited_by_name, token):
 def send_invite():
     cu = cur()
     if not cu: return jsonify({"error": "Não autenticado"}), 401
-    email = request.json.get("email","").lower().strip()
-    role  = request.json.get("role","member")
+    d=request.json or {}
+    email = d.get("email","").lower().strip()
+    role  = d.get("role","member")
     if "@" not in email: return jsonify({"error":"Email inválido"}),400
     conn = get_db()
     existing = conn.execute("SELECT id FROM users WHERE email=?",(email,)).fetchone()
@@ -1269,7 +1317,7 @@ def check_invite():
 
 @app.route("/api/invite/accept", methods=["POST"])
 def accept_invite():
-    d     = request.json
+    d     = request.json or {}
     token = d.get("token","")
     inv   = INVITE_TOKENS.get(token)
     if not inv: return jsonify({"error":"Convite inválido ou expirado"}),404
@@ -1288,7 +1336,7 @@ def accept_invite():
     cnt      = conn.execute("SELECT COUNT(*) as c FROM users").fetchone()["c"]
     new_id   = uid()
     conn.execute("INSERT INTO users (id,name,email,password,role,avatar,color,bio,department,phone,location,online,joined,skills,google_id,verified) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        (new_id,name,email,pw,inv["role"],initials,colors[cnt%len(colors)],"","","","",True,datetime.now().strftime("%Y-%m-%d"),"[]",None,True))
+        (new_id,name,email,hash_password(pw),inv["role"],initials,colors[cnt%len(colors)],"","","","",True,datetime.now().strftime("%Y-%m-%d"),"[]",None,True))
     conn.execute("INSERT INTO notifications VALUES (?,?,?,?,?,?,?)",
         (uid(),inv["invited_by_id"],"team",f"{name} aceitou o convite!",
          f"{name} juntou-se à equipa via convite.",0,now()))
@@ -1388,7 +1436,7 @@ def get_chat():
 def post_chat():
     cu=cur()
     if not cu: return jsonify({"error":"Não autenticado"}),401
-    text=request.json.get("text","").strip()
+    text=(request.json or {}).get("text","").strip()
     if not text: return jsonify({"error":"Mensagem vazia"}),400
     mid=uid(); ts=now()
     conn=get_db()
@@ -1446,6 +1494,7 @@ def timer_stop(tid):
 
 @app.route("/api/tasks/<tid>/timers", methods=["GET"])
 def get_timers(tid):
+    if not cur(): return jsonify({"error":"Não autenticado"}),401
     conn=get_db()
     rows=conn.execute("SELECT * FROM task_timers WHERE task_id=? ORDER BY start_time DESC",(tid,)).fetchall()
     conn.close()
@@ -1454,6 +1503,7 @@ def get_timers(tid):
 # ── HISTÓRICO DE ALTERAÇÕES ─────────────────────
 @app.route("/api/tasks/<tid>/history", methods=["GET"])
 def get_task_history(tid):
+    if not cur(): return jsonify({"error":"Não autenticado"}),401
     conn=get_db()
     rows=conn.execute("SELECT h.*,u.name as user_name,u.color as user_color,u.avatar as user_avatar FROM task_history h LEFT JOIN users u ON h.user_id=u.id WHERE h.task_id=? ORDER BY h.created DESC",(tid,)).fetchall()
     conn.close()
@@ -1488,12 +1538,12 @@ def get_attachments(tid):
 def add_attachment(tid):
     cu=cur()
     if not cu: return jsonify({"error":"Não autenticado"}),401
-    d=request.json
+    d=request.json or {}
     filename=d.get("filename","ficheiro")
     mimetype=d.get("mimetype","application/octet-stream")
     data=d.get("data","")
     size=len(data)
-    if size>2000000: return jsonify({"error":"Ficheiro demasiado grande (máx 1.5MB)"}),400
+    if size>2000000: return jsonify({"error":"Ficheiro demasiado grande (máx 2MB)"}),400
     aid=uid(); ts=now()
     conn=get_db()
     conn.execute("INSERT INTO task_attachments VALUES (?,?,?,?,?,?,?,?)",(aid,tid,cu["id"],filename,mimetype,data,size,ts))

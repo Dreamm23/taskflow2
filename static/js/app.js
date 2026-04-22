@@ -95,30 +95,36 @@ const api = async (url, m="GET", b=null, timeoutMs=15000) => {
     const r = await fetch(url, {...o, signal:controller.signal});
     clearTimeout(timer);
     if(!r.ok && r.status===401 && url!=="/api/auth/me" && url!=="/api/auth/login"){
-      // Sessão expirada — tentar re-login automático silencioso
-      const creds = localStorage.getItem("tf_creds");
-      if(creds){
-        try {
-          const {email, password} = JSON.parse(creds);
-          const relogin = await fetch("/api/auth/login",{
-            method:"POST",
-            headers:{"Content-Type":"application/json"},
-            body:JSON.stringify({email,password})
-          });
-          const redata = await relogin.json();
-          if(redata.user){
-            S.user = redata.user;
-            localStorage.setItem("tf_u", JSON.stringify(redata.user));
-            // Repetir o pedido original após re-login
-            const r2 = await fetch(url, {...o});
-            return r2.json();
-          }
-        } catch(e2) {}
+      // Sessão expirada — tentar re-login automático silencioso (uma vez só)
+      if(!S._reloggingIn){
+        const creds = localStorage.getItem("tf_creds");
+        if(creds){
+          S._reloggingIn = true;
+          try {
+            const {email, password} = JSON.parse(creds);
+            const relogin = await fetch("/api/auth/login",{
+              method:"POST",
+              headers:{"Content-Type":"application/json"},
+              body:JSON.stringify({email,password})
+            });
+            const redata = await relogin.json();
+            if(redata.user){
+              S.user = redata.user;
+              localStorage.setItem("tf_u", JSON.stringify(redata.user));
+              S._reloggingIn = false;
+              // Repetir o pedido original após re-login
+              const r2 = await fetch(url, {...o});
+              return r2.ok ? r2.json() : {error:"Erro no pedido após re-login."};
+            }
+          } catch(e2) {}
+          S._reloggingIn = false;
+        }
       }
       // Login Google ou sem credenciais — redirecionar para login silenciosamente
       localStorage.removeItem("tf_u");
       localStorage.removeItem("tf_creds");
       S.user = null;
+      S._reloggingIn = false;
       const _ap8=document.getElementById("app"); if(_ap8){_ap8.classList.add("hidden");_ap8.classList.remove("visible");}
       const _ls8=document.getElementById("login-screen"); if(_ls8){_ls8.classList.remove("hidden");}
       toast("A sessão expirou. Faz login novamente.","w");
@@ -1769,7 +1775,7 @@ function renderNoteEd(nid){
 }
 
 function openNote(nid){ S.noteOpen=nid; renderNotes(); }
-async function createNote(){ const n=await api("/api/notes","POST",{title:"Nova nota",content:"",color:PALETTE[0]}); S.notes.unshift(n); S.noteOpen=n.id; renderNotes(); }
+async function createNote(){ const n=await api("/api/notes","POST",{title:"Nova nota",content:"",color:PALETTE[0]}); if(!n||n.error){toast(n?.error||"Erro ao criar nota","e");return;} S.notes.unshift(n); S.noteOpen=n.id; renderNotes(); }
 function noteTitle(nid,v){ clearTimeout(S._nt); S._nt=setTimeout(async()=>{ await api(`/api/notes/${nid}`,"PATCH",{title:v}); const n=S.notes.find(x=>x.id===nid);if(n)n.title=v; },600); }
 function noteBody(nid,v){ clearTimeout(S._nb); S._nb=setTimeout(async()=>{ await api(`/api/notes/${nid}`,"PATCH",{content:v}); const n=S.notes.find(x=>x.id===nid);if(n)n.content=v; },600); }
 async function noteColor(nid,color,el){ await api(`/api/notes/${nid}`,"PATCH",{color}); const n=S.notes.find(x=>x.id===nid);if(n)n.color=color; document.querySelectorAll(".col-opt").forEach(e=>e.classList.remove("on")); el.classList.add("on"); const ed=document.querySelector("[style*='note-ed-title']")?.closest("div");if(ed){ed.style.background=color+"10";ed.style.borderColor=color+"28";} }
@@ -2857,10 +2863,10 @@ function renderDetail(t){
     </div>`;
 }
 
-async function patchT(id,f,v){ await api(`/api/tasks/${id}`,"PATCH",{[f]:v}); const t=S.tasks.find(x=>x.id===id);if(t)t[f]=v; updateSB(); render(S.view); }
-async function toggleSub(tid,sid){ const r=await api(`/api/tasks/${tid}/subtask/${sid}`,"PATCH"); const t=S.tasks.find(x=>x.id===tid); if(t){const s=t.subtasks.find(x=>x.id===sid);if(s)s.done=r.done;} renderDetail(t); }
-async function postCmt(tid){ const i=document.getElementById("ci-"+tid);if(!i?.value.trim())return; const r=await api(`/api/tasks/${tid}/comment`,"POST",{text:i.value}); const t=S.tasks.find(x=>x.id===tid);if(t)t.comments.push(r); i.value=""; renderDetail(t); }
-async function delCmt(tid,cid){ await api(`/api/tasks/${tid}/comment/${cid}`,"DELETE"); const t=S.tasks.find(x=>x.id===tid);if(t)t.comments=t.comments.filter(c=>c.id!==cid); renderDetail(t); }
+async function patchT(id,f,v){ const r=await api(`/api/tasks/${id}`,"PATCH",{[f]:v}); if(r&&r.error){toast(r.error,"e");return;} const t=S.tasks.find(x=>x.id===id);if(t)t[f]=v; updateSB(); render(S.view); }
+async function toggleSub(tid,sid){ const r=await api(`/api/tasks/${tid}/subtask/${sid}`,"PATCH"); const t=S.tasks.find(x=>x.id===tid); if(t){ if(r&&!r.error){const s=t.subtasks?.find(x=>x.id===sid);if(s)s.done=r.done;} renderDetail(t); } }
+async function postCmt(tid){ const i=document.getElementById("ci-"+tid);if(!i?.value.trim())return; const r=await api(`/api/tasks/${tid}/comment`,"POST",{text:i.value}); if(r.error){toast(r.error,"e");return;} const t=S.tasks.find(x=>x.id===tid);if(t){if(!Array.isArray(t.comments))t.comments=[];t.comments.push(r);} i.value=""; renderDetail(t); }
+async function delCmt(tid,cid){ const r=await api(`/api/tasks/${tid}/comment/${cid}`,"DELETE"); if(r&&r.error){toast(r.error,"e");return;} const t=S.tasks.find(x=>x.id===tid);if(t)t.comments=(t.comments||[]).filter(c=>c.id!==cid); renderDetail(t); }
 async function delTask(id){
   const t = S.tasks.find(x=>x.id===id);
   const mo = document.createElement("div"); mo.className="mo";
@@ -2909,6 +2915,7 @@ async function submitEvent(){
   const atts=[...document.querySelectorAll("#ev-atts .att-opt.on")].map(el=>el.dataset.id);
   const e={title,description:document.getElementById("ev-desc").value,start:document.getElementById("ev-start").value,end:document.getElementById("ev-end").value,type:document.getElementById("ev-type").value,project:document.getElementById("ev-proj").value,color:S.selColor,attendees:atts};
   const r=await api("/api/events","POST",e);
+  if(r.error){toast(r.error,"e");return;}
   S.events.push(r); closeMo("mo-event"); toast(`Evento "${r.title}" criado!`,"s");
   if(S.view==="calendar")renderCal(); if(S.view==="dashboard")renderDash();
 }
@@ -3133,6 +3140,7 @@ async function submitProj(){
   const name=document.getElementById("np-name").value.trim();
   if(!name){toast("Nome obrigatório","w");return;}
   const r=await api("/api/projects","POST",{name,color:S.selColor,icon:document.getElementById("np-icon").value||"📁",description:document.getElementById("np-desc").value,deadline:document.getElementById("np-deadline").value||null});
+  if(r.error){toast(r.error,"e");return;}
   S.projects.push(r); closeMo("mo-proj"); toast(`Projeto "${r.name}" criado!`,"s"); renderSBProjs(); render(S.view);
 }
 
@@ -4667,7 +4675,8 @@ function fmtDuration(secs){
 
 async function renderTimerSection(tid){
   const timers = await api(`/api/tasks/${tid}/timers`);
-  const totalSecs = (timers||[]).reduce((s,t)=>s+(t.duration||0),0);
+  const timerList = Array.isArray(timers) ? timers : [];
+  const totalSecs = timerList.reduce((s,t)=>s+(t.duration||0),0);
   const isActive = !!activeTimers[tid];
 
   return`<div style="border-top:1px solid var(--b1);padding-top:14px;margin-top:14px">
@@ -4681,7 +4690,7 @@ async function renderTimerSection(tid){
       </div>
     </div>
     ${totalSecs?`<div style="font-size:12px;color:var(--t3);margin-bottom:8px">Total: <strong style="color:var(--t)">${fmtDuration(totalSecs)}</strong></div>`:""}
-    ${(timers||[]).slice(0,5).map(t=>{
+    ${timerList.slice(0,5).map(t=>{
       const u=S.users.find(x=>x.id===t.user_id);
       return`<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--b1);font-size:11.5px">
         <div class="av sm" style="background:${u?.color||"#666"}">${u?.avatar||"?"}</div>
@@ -4728,14 +4737,14 @@ async function renderAttachments(tid){
   const attachments = await api(`/api/tasks/${tid}/attachments`);
   return`<div style="border-top:1px solid var(--b1);padding-top:14px;margin-top:14px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-      <div style="font-size:12.5px;font-weight:700;color:var(--t2)">📎 Anexos ${attachments?.length?`(${attachments.length})`:""}</div>
+      <div style="font-size:12.5px;font-weight:700;color:var(--t2)">📎 Anexos ${Array.isArray(attachments)&&attachments.length?`(${attachments.length})`:""}</div>
       <label style="padding:5px 12px;border-radius:8px;background:var(--bg3);border:1px solid var(--b1);font-size:12px;cursor:pointer;color:var(--t2);font-weight:600">
         + Adicionar
         <input type="file" accept="image/*,.pdf,.doc,.docx,.txt" style="display:none" onchange="uploadAttachment('${tid}',this)"/>
       </label>
     </div>
     <div id="att-list-${tid}">
-      ${(attachments||[]).length?attachments.map(a=>renderAttachmentItem(a,tid)).join(""):`<div style="font-size:12px;color:var(--t3)">Sem anexos.</div>`}
+      ${(Array.isArray(attachments)&&attachments.length)?attachments.map(a=>renderAttachmentItem(a,tid)).join(""):`<div style="font-size:12px;color:var(--t3)">Sem anexos.</div>`}
     </div>
   </div>`;
 }
@@ -4756,7 +4765,7 @@ function renderAttachmentItem(a, tid){
 
 async function uploadAttachment(tid, input){
   const file=input.files[0]; if(!file) return;
-  if(file.size>1500000){ toast("Ficheiro demasiado grande (máx 1.5MB)","e"); return; }
+  if(file.size>2000000){ toast("Ficheiro demasiado grande (máx 2MB)","e"); return; }
   toast("A carregar...","i");
   const reader=new FileReader();
   reader.onload=async(e)=>{
