@@ -368,8 +368,8 @@ def init_db():
         conn.executemany("INSERT INTO activity VALUES (?,?,?,?,?,?,?,?)", activity)
 
         notifications = [
-            ("nf1","u1","deadline","Prazo a aproximar","Landing Page termina em 3 dias",0,datetime.now().isoformat()),
-            ("nf2","u1","comment","Novo comentário","Carla comentou numa tarefa",0,datetime.now().isoformat()),
+            ("nf1","u1","deadline","Prazo a aproximar","Landing Page termina em 3 dias",False,datetime.now().isoformat()),
+            ("nf2","u1","comment","Novo comentário","Carla comentou numa tarefa",False,datetime.now().isoformat()),
         ]
         conn.executemany("INSERT INTO notifications VALUES (?,?,?,?,?,?,?)", notifications)
 
@@ -819,7 +819,7 @@ def create_task():
         if assignee_id and assignee_id != cu["id"]:
             conn.execute("INSERT INTO notifications VALUES (?,?,?,?,?,?,?)",
                 (uid(),assignee_id,"task","Nova tarefa atribuída",
-                 f'{cu["name"]} atribuiu-te "{title}"',0,now()))
+                 f'{cu["name"]} atribuiu-te "{title}"',False,now()))
             asgn_row=conn.execute("SELECT * FROM users WHERE id=?",(assignee_id,)).fetchone()
             if asgn_row:
                 asgn=map_user(asgn_row)
@@ -858,7 +858,7 @@ def patch_task(tid):
         if old_row and new_asgn and new_asgn!=old_row["assignee"] and new_asgn!=cu["id"]:
             conn.execute("INSERT INTO notifications VALUES (?,?,?,?,?,?,?)",
                 (uid(),new_asgn,"task","Tarefa atribuída a ti",
-                 f'{cu["name"]} atribuiu-te "{old_row["title"]}"',0,now()))
+                 f'{cu["name"]} atribuiu-te "{old_row["title"]}"',False,now()))
             asgn_row=conn.execute("SELECT * FROM users WHERE id=?",(new_asgn,)).fetchone()
             if asgn_row:
                 asgn_u = map_user(asgn_row)
@@ -938,7 +938,7 @@ def add_comment(tid):
         if mentioned and mentioned["id"]!=cu["id"]:
             conn.execute("INSERT INTO notifications VALUES (?,?,?,?,?,?,?)",
                 (uid(),mentioned["id"],"mention",f"@menção de {cu['name']}",
-                 f'{cu["name"]} mencionou-te: "{text}"',0,now()))
+                 f'{cu["name"]} mencionou-te: "{text}"',False,now()))
             if is_real_email(mentioned.get("email","")):
                 threading.Thread(target=send_mention_email,args=(mentioned,cu["name"],t["title"],text),daemon=True).start()
     conn.commit(); conn.close()
@@ -1067,7 +1067,7 @@ def get_notifs():
 def read_all_notifs():
     cu=cur()
     if cu:
-        conn=get_db(); conn.execute("UPDATE notifications SET read=1 WHERE user_id=?",(cu["id"],)); conn.commit(); conn.close()
+        conn=get_db(); conn.execute("UPDATE notifications SET read=True WHERE user_id=?",(cu["id"],)); conn.commit(); conn.close()
     return jsonify({"ok":True})
 
 # ── ACTIVITY & STATS ────────────────────────────
@@ -1339,7 +1339,7 @@ def accept_invite():
         (new_id,name,email,hash_password(pw),inv["role"],initials,colors[cnt%len(colors)],"","","","",True,datetime.now().strftime("%Y-%m-%d"),"[]",None,True))
     conn.execute("INSERT INTO notifications VALUES (?,?,?,?,?,?,?)",
         (uid(),inv["invited_by_id"],"team",f"{name} aceitou o convite!",
-         f"{name} juntou-se à equipa via convite.",0,now()))
+         f"{name} juntou-se à equipa via convite.",False,now()))
     conn.commit()
     row = conn.execute("SELECT * FROM users WHERE id=?",(new_id,)).fetchone()
     conn.close()
