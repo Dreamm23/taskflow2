@@ -2,7 +2,7 @@ from flask import Flask, render_template, request, jsonify, session
 import threading
 import time
 from datetime import datetime, timedelta
-import uuid, os, json, random, smtplib, hashlib, hmac
+import uuid, os, json, random, smtplib, hashlib, hmac, secrets
 import sqlite3
 
 try:
@@ -18,7 +18,11 @@ from email.mime.multipart import MIMEMultipart
 app = Flask(__name__,
             template_folder=os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates"),
             static_folder=os.path.join(os.path.dirname(os.path.abspath(__file__)), "static"))
-app.secret_key = os.environ.get("SECRET_KEY", "taskflow_v8_secret_k3y_2026_xR9#mP2$qN7@wL4")
+_env_secret = os.environ.get("SECRET_KEY")
+if not _env_secret:
+    _env_secret = secrets.token_hex(32)
+    print("[SECURITY] SECRET_KEY não definida — gerada uma temporária. Define a env var em produção (sessões serão invalidadas em cada restart).")
+app.secret_key = _env_secret
 app.config["SESSION_COOKIE_SECURE"] = os.environ.get("FLASK_ENV") == "production"
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
@@ -115,11 +119,12 @@ def global_rate_limit():
 # ═══════════════ CONFIG ═══════════════
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "196981053682-28hre629rjctqs5v977j68u4h9l2aitb.apps.googleusercontent.com")
 GEMINI_KEY       = os.environ.get("GEMINI_API_KEY", "")
-SMTP_EMAIL       = os.environ.get("SMTP_EMAIL", "sweetdeus@gmail.com")
+SMTP_EMAIL       = os.environ.get("SMTP_EMAIL", "")
 SMTP_PASSWORD    = os.environ.get("SMTP_PASSWORD", "")
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
 VERIFY_CODES = {}
+RESET_CODES  = {}
 BASE_URL = os.environ.get("BASE_URL", "http://127.0.0.1:5000")
 
 # ═══════════════ DATABASE ═══════════════
@@ -224,7 +229,8 @@ def init_db():
             created TEXT, pinned INTEGER DEFAULT 0,
             dependencies TEXT DEFAULT '[]',
             recurrence TEXT DEFAULT NULL,
-            recurrence_end TEXT DEFAULT NULL
+            recurrence_end TEXT DEFAULT NULL,
+            completed_at TEXT DEFAULT NULL
         )""")
     conn.execute("""
         CREATE TABLE IF NOT EXISTS events (
@@ -280,6 +286,7 @@ def init_db():
             "ALTER TABLE tasks ADD COLUMN pinned INTEGER DEFAULT 0",
             "ALTER TABLE tasks ADD COLUMN recurrence TEXT DEFAULT NULL",
             "ALTER TABLE tasks ADD COLUMN recurrence_end TEXT DEFAULT NULL",
+            "ALTER TABLE tasks ADD COLUMN completed_at TEXT DEFAULT NULL",
         ]
         for migration in migrations:
             try:
@@ -295,6 +302,7 @@ def init_db():
             "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS pinned INTEGER DEFAULT 0",
             "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS recurrence TEXT DEFAULT NULL",
             "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS recurrence_end TEXT DEFAULT NULL",
+            "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completed_at TEXT DEFAULT NULL",
         ]
         for migration in migrations:
             conn.execute(migration)
@@ -339,16 +347,16 @@ def init_db():
         conn.executemany("INSERT INTO projects VALUES (?,?,?,?,?,?,?,?,?)", projects)
 
         tasks = [
-            ("t1","Redesign da Landing Page","Atualizar visual com novo branding.","Em Progresso","high","u3",'["design","feature"]',d(3),"p1",'[{"id":"s1","title":"Wireframes","done":true},{"id":"s2","title":"Mockup final","done":false}]','[]',d(-5),1,'[]',None,None),
-            ("t2","API de Autenticação JWT","Refresh tokens e 2FA.","A Fazer","high","u4",'["dev","feature"]',d(7),"p1",'[{"id":"s3","title":"Endpoint login","done":false}]','[]',d(-2),0,'[]',None,None),
-            ("t3","Corrigir bug no formulário","Validação falha em Safari.","Revisão","medium","u4",'["bug"]',d(1),"p2",'[{"id":"s4","title":"Reproduzir","done":true}]','[]',d(-8),0,'[]',None,None),
-            ("t4","Documentação da API","Swagger completo.","A Fazer","low","u2",'["docs"]',d(14),"p1",'[]','[]',d(-1),0,'[]',None,None),
-            ("t5","Dashboard Analytics","Métricas em tempo real.","Em Progresso","medium","u4",'["dev"]',d(10),"p1",'[{"id":"s5","title":"Chart.js","done":true}]','[]',d(-3),0,'[]',None,None),
-            ("t6","Setup CI/CD","GitHub Actions automático.","Concluído","high","u2",'["devops"]',d(-2),"p3",'[{"id":"s6","title":"Workflow","done":true}]','[]',d(-15),0,'[]',None,None),
-            ("t7","Design System","Componentes com Storybook.","Em Progresso","high","u3",'["design"]',d(20),"p2",'[{"id":"s7","title":"Tokens","done":true}]','[]',d(-10),0,'[]',None,None),
-            ("t8","Testes de Performance","Lighthouse audit completo.","A Fazer","medium","u4",'["dev"]',d(15),"p3",'[]','[]',d(-1),0,'[]',None,None),
+            ("t1","Redesign da Landing Page","Atualizar visual com novo branding.","Em Progresso","high","u3",'["design","feature"]',d(3),"p1",'[{"id":"s1","title":"Wireframes","done":true},{"id":"s2","title":"Mockup final","done":false}]','[]',d(-5),1,'[]',None,None,None),
+            ("t2","API de Autenticação JWT","Refresh tokens e 2FA.","A Fazer","high","u4",'["dev","feature"]',d(7),"p1",'[{"id":"s3","title":"Endpoint login","done":false}]','[]',d(-2),0,'[]',None,None,None),
+            ("t3","Corrigir bug no formulário","Validação falha em Safari.","Revisão","medium","u4",'["bug"]',d(1),"p2",'[{"id":"s4","title":"Reproduzir","done":true}]','[]',d(-8),0,'[]',None,None,None),
+            ("t4","Documentação da API","Swagger completo.","A Fazer","low","u2",'["docs"]',d(14),"p1",'[]','[]',d(-1),0,'[]',None,None,None),
+            ("t5","Dashboard Analytics","Métricas em tempo real.","Em Progresso","medium","u4",'["dev"]',d(10),"p1",'[{"id":"s5","title":"Chart.js","done":true}]','[]',d(-3),0,'[]',None,None,None),
+            ("t6","Setup CI/CD","GitHub Actions automático.","Concluído","high","u2",'["devops"]',d(-2),"p3",'[{"id":"s6","title":"Workflow","done":true}]','[]',d(-15),0,'[]',None,None,d(-2)),
+            ("t7","Design System","Componentes com Storybook.","Em Progresso","high","u3",'["design"]',d(20),"p2",'[{"id":"s7","title":"Tokens","done":true}]','[]',d(-10),0,'[]',None,None,None),
+            ("t8","Testes de Performance","Lighthouse audit completo.","A Fazer","medium","u4",'["dev"]',d(15),"p3",'[]','[]',d(-1),0,'[]',None,None,None),
         ]
-        conn.executemany("INSERT INTO tasks VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", tasks)
+        conn.executemany("INSERT INTO tasks (id,title,description,status,priority,assignee,tags,deadline,project,subtasks,comments,created,pinned,dependencies,recurrence,recurrence_end,completed_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", tasks)
 
         events = [
             ("e1","Sprint Planning",d(1)+"T10:00",d(1)+"T11:00","#6366f1","p1","meeting","Planeamento da sprint",'["u1","u2","u3","u4"]',0),
@@ -391,7 +399,7 @@ def safe(u): return {k:v for k,v in u.items() if k != "password"}
 def pj(v):
     if isinstance(v,(list,dict)): return v
     try: return json.loads(v) if v else []
-    except: return []
+    except Exception: return []
 
 def row2dict(row):
     if not row: return None
@@ -417,6 +425,7 @@ def map_task(r):
     t["deadline"]     = str(t.get("deadline") or "")
     t["recurrence"]   = t.get("recurrence") or None
     t["recurrenceEnd"]= t.get("recurrence_end") or None
+    t["completed_at"] = t.get("completed_at") or ""
     return t
 
 def map_project(r):
@@ -511,8 +520,38 @@ def send_task_email(user, task_title, assigned_by, deadline, priority):
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as s:
             s.login(SMTP_EMAIL, SMTP_PASSWORD)
             s.sendmail(SMTP_EMAIL, user["email"], msg.as_string())
+        return True
     except Exception as e:
         print(f"[EMAIL TASK] Erro: {e}")
+        return False
+
+def send_reset_email(email, name, code):
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = f"🔑 TaskFlow — Código de recuperação: {code}"
+        msg["From"] = f"TaskFlow <{SMTP_EMAIL}>"
+        msg["To"] = email
+        html = f"""<div style="font-family:Inter,Arial,sans-serif;max-width:480px;margin:0 auto;background:#11111f;border-radius:14px;padding:32px;color:#eeeef5">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:24px">
+            <div style="width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,#6366f1,#a78bfa);display:inline-flex;align-items:center;justify-content:center;font-size:18px">⚡</div>
+            <span style="font-size:20px;font-weight:800;color:#eeeef5">TaskFlow</span>
+          </div>
+          <h2 style="font-size:22px;font-weight:700;margin-bottom:8px;color:#eeeef5">Olá, {name}! 🔑</h2>
+          <p style="color:#8888aa;margin-bottom:24px;line-height:1.6">Recebemos um pedido para recuperar a password da tua conta. Usa o código abaixo para definir uma nova password.</p>
+          <div style="background:#1d1d30;border-radius:12px;padding:28px;text-align:center;margin-bottom:24px">
+            <div style="font-size:44px;font-weight:800;letter-spacing:12px;color:#a5b4fc;font-family:monospace">{code}</div>
+            <div style="font-size:12px;color:#50507a;margin-top:10px">Válido por 15 minutos</div>
+          </div>
+          <p style="font-size:12px;color:#50507a">Se não pediste a recuperação da password, ignora este email. A tua conta está segura.</p>
+        </div>"""
+        msg.attach(MIMEText(html, "html"))
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as s:
+            s.login(SMTP_EMAIL, SMTP_PASSWORD)
+            s.sendmail(SMTP_EMAIL, email, msg.as_string())
+        return True
+    except Exception as e:
+        print(f"[EMAIL RESET] Erro: {e}")
+        return False
 
 def send_mention_email(user, mentioned_by, task_title, comment_text):
     """Envia email quando alguém é mencionado num comentário"""
@@ -571,7 +610,7 @@ def login():
         return jsonify({"error":"Email ou password incorretos."}),401
     reset_login_limit(email)  # reset contador ao fazer login com sucesso
     u=map_user(row)
-    conn=get_db(); conn.execute("UPDATE users SET online=TRUE WHERE id=?",(u["id"],)); conn.commit(); conn.close()
+    conn=get_db(); conn.execute("UPDATE users SET online=1 WHERE id=?",(u["id"],)); conn.commit(); conn.close()
     session.permanent = True
     session["uid"]=u["id"]; return jsonify({"user":safe(u)})
 
@@ -620,6 +659,46 @@ def verify_code():
     conn.close()
     u=map_user(row); session.permanent=True; session["uid"]=u["id"]; return jsonify({"user":safe(u)})
 
+@app.route("/api/auth/forgot", methods=["POST"])
+def forgot_password():
+    ip=request.remote_addr or "unknown"
+    if not check_rate_limit(f"forgot:{ip}", max_req=5, window=300):
+        return jsonify({"error":"Demasiados pedidos. Aguarda alguns minutos."}),429
+    d=request.json or {}; email=d.get("email","").lower().strip()
+    if "@" not in email: return jsonify({"error":"Email inválido."}),400
+    conn=get_db()
+    user=conn.execute("SELECT * FROM users WHERE email=?",(email,)).fetchone()
+    conn.close()
+    # Não revelar se o email existe por segurança
+    if not user:
+        return jsonify({"ok":True})
+    code=str(random.randint(100000,999999))
+    expired=[k for k,v in RESET_CODES.items() if datetime.now()>v["expires"]]
+    for k in expired: del RESET_CODES[k]
+    RESET_CODES[email]={"code":code,"expires":datetime.now()+timedelta(minutes=15)}
+    u=map_user(user)
+    def _send():
+        sent=send_reset_email(email,u["name"],code)
+        if not sent: print(f"\n[RESET CODE] {email}: {code}\n")
+    threading.Thread(target=_send,daemon=True).start()
+    return jsonify({"ok":True})
+
+@app.route("/api/auth/reset", methods=["POST"])
+def reset_password():
+    d=request.json or {}; email=d.get("email","").lower().strip()
+    code=d.get("code","").strip(); new_pw=d.get("password","")
+    if len(new_pw)<6: return jsonify({"error":"Mínimo 6 caracteres."}),400
+    entry=RESET_CODES.get(email)
+    if not entry: return jsonify({"error":"Código expirado. Solicita um novo."}),400
+    if datetime.now()>entry["expires"]:
+        del RESET_CODES[email]; return jsonify({"error":"Código expirado. Solicita um novo."}),400
+    if entry["code"]!=code: return jsonify({"error":"Código incorreto."}),400
+    del RESET_CODES[email]
+    conn=get_db()
+    conn.execute("UPDATE users SET password=? WHERE email=?",(hash_password(new_pw),email))
+    conn.commit(); conn.close()
+    return jsonify({"ok":True})
+
 @app.route("/api/auth/google", methods=["POST"])
 def google_auth():
     token=(request.json or {}).get("credential","")
@@ -633,7 +712,7 @@ def google_auth():
         row=conn.execute("SELECT * FROM users WHERE email=? OR google_id=?",(email,gid)).fetchone()
         if row:
             u=map_user(row)
-            conn.execute("UPDATE users SET google_id=?,online=TRUE WHERE id=?",(gid,u["id"])); conn.commit()
+            conn.execute("UPDATE users SET google_id=?,online=1 WHERE id=?",(gid,u["id"])); conn.commit()
         else:
             initials="".join(w[0] for w in name.split())[:2].upper()
             new_id=uid()
@@ -656,7 +735,7 @@ def get_me():
 def logout():
     uid_v=session.get("uid")
     if uid_v:
-        conn=get_db(); conn.execute("UPDATE users SET online=FALSE WHERE id=?",(uid_v,)); conn.commit(); conn.close()
+        conn=get_db(); conn.execute("UPDATE users SET online=0 WHERE id=?",(uid_v,)); conn.commit(); conn.close()
     session.clear(); return jsonify({"ok":True})
 
 # ── USERS ──────────────────────────────────────
@@ -729,7 +808,7 @@ def get_projects():
 def create_project():
     cu=cur()
     if not cu or cu["role"] not in ["admin","manager"]: return jsonify({"error":"Sem permissão"}),403
-    d=request.json; pid=uid()
+    d=request.json or {}; pid=uid()
     conn=get_db()
     conn.execute("INSERT INTO projects VALUES (?,?,?,?,?,?,?,?,?)",
         (pid,d.get("name",""),d.get("color","#6366f1"),d.get("icon","📁"),d.get("description",""),
@@ -742,7 +821,7 @@ def create_project():
 def patch_project(pid):
     cu=cur()
     if not cu or cu["role"] not in ["admin","manager"]: return jsonify({"error":"Sem permissão"}),403
-    d=request.json; sets=[]; vals=[]
+    d=request.json or {}; sets=[]; vals=[]
     for k in ["name","color","icon","description","status","deadline"]:
         if k in d: sets.append(f"{k}=?"); vals.append(d[k] or None if k=="deadline" else d[k])
     if "members" in d: sets.append("members=?"); vals.append(json.dumps(d["members"]))
@@ -832,7 +911,7 @@ def create_task():
     except Exception as e:
         import traceback; traceback.print_exc()
         try: conn.close()
-        except: pass
+        except Exception: pass
         return jsonify({"error": f"Erro ao criar tarefa: {str(e)[:300]}"}), 500
 
 @app.route("/api/tasks/<tid>", methods=["PATCH"])
@@ -842,6 +921,11 @@ def patch_task(tid):
     d=request.json or {}; sets=[]; vals=[]
     for k in ["title","description","status","priority","assignee","project"]:
         if k in d: sets.append(f"{k}=?"); vals.append(d[k])
+    if "status" in d:
+        if d["status"] == "Concluído":
+            sets.append("completed_at=?"); vals.append(datetime.now().strftime("%Y-%m-%d"))
+        else:
+            sets.append("completed_at=?"); vals.append(None)
     if "deadline" in d: sets.append("deadline=?"); vals.append(d["deadline"] or None)
     if "pinned" in d: sets.append("pinned=?"); vals.append(1 if d["pinned"] else 0)
     if "tags" in d: sets.append("tags=?"); vals.append(json.dumps(d["tags"]))
@@ -980,7 +1064,7 @@ def get_events():
 def create_event():
     cu=cur()
     if not cu: return jsonify({"error":"Não autenticado"}),401
-    d=request.json; eid=uid(); conn=get_db()
+    d=request.json or {}; eid=uid(); conn=get_db()
     conn.execute("INSERT INTO events VALUES (?,?,?,?,?,?,?,?,?,?)",
         (eid,d.get("title",""),d.get("start",""),d.get("end",""),d.get("color","#6366f1"),
          d.get("project",""),d.get("type","meeting"),d.get("description",""),
@@ -993,7 +1077,7 @@ def create_event():
 def patch_event(eid):
     cu=cur()
     if not cu: return jsonify({"error":"Não autenticado"}),401
-    d=request.json; sets=[]; vals=[]
+    d=request.json or {}; sets=[]; vals=[]
     for k in ["title","color","project","type","description"]:
         if k in d: sets.append(f"{k}=?"); vals.append(d[k])
     if "start" in d: sets.append("start_time=?"); vals.append(d["start"])
@@ -1025,7 +1109,7 @@ def get_notes():
 def create_note():
     cu=cur()
     if not cu: return jsonify({"error":"Não autenticado"}),401
-    d=request.json; nid=uid(); conn=get_db()
+    d=request.json or {}; nid=uid(); conn=get_db()
     conn.execute("INSERT INTO notes VALUES (?,?,?,?,?,?,?,?)",
         (nid,cu["id"],d.get("title","Nova Nota"),d.get("content",""),now(),now(),d.get("color","#6366f1"),0))
     conn.commit(); row=conn.execute("SELECT * FROM notes WHERE id=?",(nid,)).fetchone(); conn.close()
@@ -1067,8 +1151,27 @@ def get_notifs():
 def read_all_notifs():
     cu=cur()
     if cu:
-        conn=get_db(); conn.execute("UPDATE notifications SET read=True WHERE user_id=?",(cu["id"],)); conn.commit(); conn.close()
+        conn=get_db(); conn.execute("UPDATE notifications SET read=1 WHERE user_id=?",(cu["id"],)); conn.commit(); conn.close()
     return jsonify({"ok":True})
+
+@app.route("/api/notifications", methods=["POST"])
+def create_notif():
+    cu=cur()
+    if not cu: return jsonify({"error":"Não autenticado"}),401
+    d=request.json or {}
+    target=d.get("user_id","") or cu["id"]
+    ntype=d.get("type","info")[:40]
+    title=d.get("title","")[:120]
+    message=d.get("message","")[:400]
+    if not title: return jsonify({"error":"Título obrigatório"}),400
+    nid=uid()
+    conn=get_db()
+    conn.execute("INSERT INTO notifications VALUES (?,?,?,?,?,?,?)",
+        (nid,target,ntype,title,message,0,now()))
+    conn.commit()
+    row=conn.execute("SELECT * FROM notifications WHERE id=?",(nid,)).fetchone()
+    conn.close()
+    return jsonify(dict(row) if row else {"ok":True})
 
 # ── ACTIVITY & STATS ────────────────────────────
 @app.route("/api/activity")
@@ -1107,6 +1210,29 @@ def get_admin_stats():
         "historyChanges":history["c"] if history else 0,
     })
 
+@app.route("/api/stats/timers")
+def get_timer_stats():
+    cu=cur()
+    if not cu: return jsonify({"error":"Sem sessão"}),401
+    conn=get_db()
+    rows=conn.execute("""
+        SELECT tt.task_id, t.title, SUM(tt.duration) as total_secs
+        FROM task_timers tt
+        LEFT JOIN tasks t ON t.id=tt.task_id
+        WHERE tt.end_time IS NOT NULL
+        GROUP BY tt.task_id
+        ORDER BY total_secs DESC
+        LIMIT 8
+    """).fetchall()
+    total=conn.execute("SELECT SUM(duration) as s FROM task_timers WHERE end_time IS NOT NULL").fetchone()
+    avg=conn.execute("SELECT AVG(sub.secs) as a FROM (SELECT SUM(duration) as secs FROM task_timers WHERE end_time IS NOT NULL GROUP BY task_id) sub").fetchone()
+    conn.close()
+    return jsonify({
+        "topTasks":[{"id":r["task_id"],"title":r["title"] or "?","secs":int(r["total_secs"] or 0)} for r in rows],
+        "totalSecs":int(total["s"] or 0) if total else 0,
+        "avgSecs":int(avg["a"] or 0) if avg else 0
+    })
+
 @app.route("/api/stats")
 def get_stats():
     conn=get_db()
@@ -1132,7 +1258,7 @@ def get_stats():
 @app.route("/api/ai/chat", methods=["POST"])
 def ai_chat():
     if not GEMINI_KEY: return jsonify({"error":"🔑 Chave Gemini não configurada. Vai a Definições → IA."}),400
-    d=request.json; msg=d.get("message","").strip(); history=d.get("history",[]); context=d.get("context","")
+    d=request.json or {}; msg=d.get("message","").strip(); history=d.get("history",[]); context=d.get("context","")
     if not msg: return jsonify({"error":"Mensagem vazia"}),400
     try:
         import urllib.request as ur, urllib.error
@@ -1354,6 +1480,28 @@ def join_page():
 @app.route("/health")
 def health():
     return jsonify({"status":"ok","version":"5"})
+
+# ── PWA — Service Worker servido da raiz para ter scope "/" ─
+@app.route("/sw.js")
+def pwa_sw():
+    from flask import send_from_directory, make_response
+    resp = make_response(send_from_directory(
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "static"),
+        "sw.js"
+    ))
+    resp.headers["Content-Type"]            = "application/javascript"
+    resp.headers["Service-Worker-Allowed"]  = "/"
+    resp.headers["Cache-Control"]           = "no-cache"
+    return resp
+
+@app.route("/manifest.json")
+def pwa_manifest():
+    from flask import send_from_directory
+    return send_from_directory(
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "static"),
+        "manifest.json",
+        mimetype="application/manifest+json"
+    )
 
 
 # ── DEADLINE REMINDERS ──────────────────────────

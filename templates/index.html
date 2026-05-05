@@ -2,7 +2,7 @@
 <html lang="pt">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover"/>
 <title>TaskFlow — Gestor de Tarefas Inteligente</title>
 <meta name="description" content="TaskFlow — Gestor de tarefas inteligente com IA, Kanban, calendário e colaboração em equipa."/>
 <meta name="theme-color" content="#6366f1"/>
@@ -10,6 +10,13 @@
 <meta property="og:description" content="Gestor de tarefas com IA, Kanban e colaboração em equipa."/>
 <meta property="og:type" content="website"/>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>"/>
+<!-- PWA -->
+<link rel="manifest" href="/manifest.json"/>
+<link rel="apple-touch-icon" href="/static/icon-192.png"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="TaskFlow"/>
+<meta name="mobile-web-app-capable" content="yes"/>
 <!-- Fonts com display=swap para não bloquear rendering -->
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" media="print" onload="this.media='all'"/>
@@ -132,6 +139,9 @@
           </div>
         </div>
         <div class="auth-error hidden" id="li-err"></div>
+        <div style="text-align:right;margin:-4px 0 12px">
+          <button type="button" onclick="showForgot(true)" style="background:none;border:none;color:var(--a);font-size:12.5px;cursor:pointer;padding:0;text-decoration:underline;text-underline-offset:3px">Esqueceu a password?</button>
+        </div>
         <button class="lg-cta" type="submit">Entrar</button>
       </form>
 
@@ -177,6 +187,55 @@
           <button onclick="switchTab('reg')">← Voltar</button>
           <span>·</span>
           <button onclick="resendCode()">Reenviar código</button>
+        </div>
+      </div>
+
+      <!-- Forgot Password -->
+      <div id="form-forgot" class="hidden">
+        <div id="forgot-step1">
+          <div style="text-align:center;margin-bottom:16px">
+            <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="1.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          </div>
+          <div class="lg-verify-title">Recuperar password</div>
+          <div class="lg-verify-sub">Introduz o email da tua conta para receberes um código de recuperação</div>
+          <div class="lg-field" style="margin-top:20px">
+            <label>Email da conta</label>
+            <input id="forgot-email" type="email" placeholder="o-teu@email.com" autocomplete="email"/>
+          </div>
+          <div class="auth-error hidden" id="forgot-err1"></div>
+          <button class="lg-cta" onclick="sendForgotCode()">Enviar código</button>
+          <div class="lg-verify-links">
+            <button onclick="showForgot(false)">← Voltar ao login</button>
+          </div>
+        </div>
+        <div id="forgot-step2" class="hidden">
+          <div style="text-align:center;margin-bottom:16px">
+            <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="1.5"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+          </div>
+          <div class="lg-verify-title">Nova password</div>
+          <div class="lg-verify-sub">Código enviado para<br/><strong id="forgot-email-lbl"></strong></div>
+          <div class="lg-field" style="margin-top:16px">
+            <label>Código de 6 dígitos</label>
+            <input id="forgot-code" placeholder="000000" maxlength="6"
+              style="text-align:center;font-size:24px;font-weight:700;letter-spacing:8px;font-family:var(--mono)"
+              oninput="this.value=this.value.replace(/[^0-9]/g,'')"/>
+          </div>
+          <div class="lg-field">
+            <label>Nova password</label>
+            <div class="lg-pw-wrap">
+              <input id="forgot-newpass" type="password" placeholder="Mínimo 6 caracteres"/>
+              <button type="button" class="lg-eye" onclick="toggleEye('forgot-newpass',this)">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="auth-error hidden" id="forgot-err2"></div>
+          <button class="lg-cta" onclick="doResetPass()">Redefinir password</button>
+          <div class="lg-verify-links">
+            <button onclick="document.getElementById('forgot-step1').classList.remove('hidden');document.getElementById('forgot-step2').classList.add('hidden')">← Voltar</button>
+            <span>·</span>
+            <button onclick="sendForgotCode()">Reenviar código</button>
+          </div>
         </div>
       </div>
 
