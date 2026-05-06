@@ -3051,7 +3051,7 @@ function renderDetail(t){
         <div>
           <div style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">Comentários (${t.comments?.length||0})</div>
           ${!t.comments?.length?`<div style="font-size:12.5px;color:var(--t3);font-style:italic;margin-bottom:12px">Sem comentários.</div>`:""}
-          ${t.comments?.map(c=>{const cu=S.users.find(x=>x.id===c.user);return`<div class="cmt-row"><div class="av sm" style="background:${cu?.color||"#666"}">${cu?.avatar||"?"}</div><div class="cmt-bd"><div><span class="cmt-name" onclick="openProfile('${c.user}')">${cu?.name||"?"}</span><span class="cmt-time">${timeAgo(c.created)}</span>${(S.user?.role==="admin"||c.user===S.user?.id)?`<button onclick="delCmt('${t.id}','${c.id}')" style="background:none;border:none;color:var(--t3);cursor:pointer;font-size:11px;margin-left:6px">✕</button>`:""}</div><div class="cmt-text">${c.text}</div></div></div>`;}).join("")}
+          ${t.comments?.map(c=>{const cu=S.users.find(x=>x.id===c.user);return`<div class="cmt-row"><div class="av sm" style="background:${cu?.color||"#666"}">${cu?.avatar||"?"}</div><div class="cmt-bd"><div><span class="cmt-name" onclick="openProfile('${c.user}')">${escHtml(cu?.name||"?")}</span><span class="cmt-time">${timeAgo(c.created)}</span>${(S.user?.role==="admin"||c.user===S.user?.id)?`<button onclick="delCmt('${t.id}','${c.id}')" style="background:none;border:none;color:var(--t3);cursor:pointer;font-size:11px;margin-left:6px">✕</button>`:""}</div><div class="cmt-text">${escHtml(c.text)}</div></div></div>`;}).join("")}
           <div class="cmt-inp-row"><div class="av sm" style="background:${S.user?.color}">${S.user?.avatar}</div><input class="fi" id="ci-${t.id}" placeholder="Adicionar comentário..." style="flex:1" onkeydown="if(event.key==='Enter')postCmt('${t.id}')"/><button class="btn-xs" onclick="postCmt('${t.id}')">Enviar</button></div>
         </div>
         <!-- Tabs extra: Timer, Histórico, Anexos -->
@@ -3085,7 +3085,7 @@ function renderDetail(t){
     </div>`;
 }
 
-async function patchT(id,f,v){ const r=await api(`/api/tasks/${id}`,"PATCH",{[f]:v}); if(r&&r.error){toast(r.error,"e");return;} const t=S.tasks.find(x=>x.id===id);if(t)t[f]=v; if(f==="status"&&v==="Concluído"){ fireConfetti({count:100}); checkBadges(); } updateSB(); render(S.view); }
+async function patchT(id,f,v){ const r=await api(`/api/tasks/${id}`,"PATCH",{[f]:v}); if(r&&r.error){toast(r.error,"e");return;} const t=S.tasks.find(x=>x.id===id);if(t){ t[f]=v; if(f==="status"){ t.completed_at = v==="Concluído" ? new Date().toISOString().slice(0,10) : ""; } } if(f==="status"&&v==="Concluído"){ fireConfetti({count:100}); checkBadges(); } updateSB(); render(S.view); }
 async function toggleSub(tid,sid){ const r=await api(`/api/tasks/${tid}/subtask/${sid}`,"PATCH"); const t=S.tasks.find(x=>x.id===tid); if(t){ if(r&&!r.error){const s=t.subtasks?.find(x=>x.id===sid);if(s)s.done=r.done;} renderDetail(t); } }
 async function postCmt(tid){ const i=document.getElementById("ci-"+tid);if(!i?.value.trim())return; const r=await api(`/api/tasks/${tid}/comment`,"POST",{text:i.value}); if(r.error){toast(r.error,"e");return;} const t=S.tasks.find(x=>x.id===tid);if(t){if(!Array.isArray(t.comments))t.comments=[];t.comments.push(r);} i.value=""; renderDetail(t); }
 async function delCmt(tid,cid){ const r=await api(`/api/tasks/${tid}/comment/${cid}`,"DELETE"); if(r&&r.error){toast(r.error,"e");return;} const t=S.tasks.find(x=>x.id===tid);if(t)t.comments=(t.comments||[]).filter(c=>c.id!==cid); renderDetail(t); }
@@ -3553,7 +3553,8 @@ async function smartAIDispatch(msg){
 
   const now = new Date();
   const today = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
-  const tomorrow = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()+1).padStart(2,"0")}`;
+  const _tmrDate = new Date(now.getFullYear(), now.getMonth(), now.getDate()+1);
+  const tomorrow = `${_tmrDate.getFullYear()}-${String(_tmrDate.getMonth()+1).padStart(2,"0")}-${String(_tmrDate.getDate()).padStart(2,"0")}`;
   const todayFmt = now.toLocaleDateString("pt-PT",{weekday:"long",day:"2-digit",month:"long",year:"numeric"});
 
   // Contexto rico mas compacto
@@ -4205,7 +4206,7 @@ async function aiCreateTask(userMsg){
 
 ${ctx}
 
-IMPORTANTE: A data de hoje é ${today}. "Amanhã" é ${`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()+1).padStart(2,"0")}`}.
+IMPORTANTE: A data de hoje é ${today}. "Amanhã" é ${(()=>{const t=new Date(now.getFullYear(),now.getMonth(),now.getDate()+1);return`${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,"0")}-${String(t.getDate()).padStart(2,"0")}`;})()}.
 
 Responde APENAS com JSON válido (sem texto, sem markdown, sem explicação):
 {"title":"titulo da tarefa","description":"descrição","priority":"high ou medium ou low","assignee":"id do membro ou vazio","project":"id do projeto ou vazio","deadline":"YYYY-MM-DD ou vazio","status":"A Fazer"}`;
@@ -4920,8 +4921,8 @@ function renderAutomations(){
     <div style="background:var(--bg2);border:1px solid ${r.enabled?"rgba(99,102,241,.25)":"var(--b1)"};border-radius:14px;padding:16px 20px;display:flex;align-items:center;gap:14px">
       <div style="width:42px;height:42px;border-radius:12px;background:${r.enabled?"linear-gradient(135deg,var(--a),#a78bfa)":"var(--bg3)"};display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">⚡</div>
       <div style="flex:1;min-width:0">
-        <div style="font-size:13.5px;font-weight:700;color:var(--t);margin-bottom:3px">${r.name}</div>
-        <div style="font-size:11.5px;color:var(--t3)"><span style="color:var(--a2);font-weight:600">${AUTOMATION_TRIGGERS[r.trigger]||r.trigger}</span><span style="margin:0 6px">→</span><span>${AUTOMATION_ACTIONS[r.action]||r.action}${r.actionValue?" <b>"+r.actionValue+"</b>":""}</span></div>
+        <div style="font-size:13.5px;font-weight:700;color:var(--t);margin-bottom:3px">${escHtml(r.name)}</div>
+        <div style="font-size:11.5px;color:var(--t3)"><span style="color:var(--a2);font-weight:600">${escHtml(AUTOMATION_TRIGGERS[r.trigger]||r.trigger)}</span><span style="margin:0 6px">→</span><span>${escHtml(AUTOMATION_ACTIONS[r.action]||r.action)}${r.actionValue?" <b>"+escHtml(r.actionValue)+"</b>":""}</span></div>
       </div>
       <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
         <span style="font-size:10px;color:var(--t3)">${r.runCount||0}× executado</span>
@@ -4956,10 +4957,10 @@ function openNewAutomation(rule=null,idx=null){
   mo.innerHTML=`<div class="modal" style="max-width:480px" onclick="event.stopPropagation()">
     <div class="mhd"><h3>${isEdit?"✏️ Editar":"⚡ Nova"} Automação</h3><button onclick="this.closest('.mo').remove()">✕</button></div>
     <div class="mbody" style="display:flex;flex-direction:column;gap:14px">
-      <div class="fg"><label>Nome da regra</label><input class="fi" id="aut-name" placeholder="Ex: Notificar atrasos" value="${isEdit?rule.name:''}"/></div>
+      <div class="fg"><label>Nome da regra</label><input class="fi" id="aut-name" placeholder="Ex: Notificar atrasos" value="${isEdit?escHtml(rule.name):''}"/></div>
       <div class="fg"><label>Quando (gatilho)</label><select class="fi" id="aut-trigger">${Object.entries(AUTOMATION_TRIGGERS).map(([k,v])=>`<option value="${k}"${isEdit&&rule.trigger===k?" selected":""}>${v}</option>`).join("")}</select></div>
       <div class="fg"><label>Fazer (ação)</label><select class="fi" id="aut-action" onchange="updateAutomationValueField()">${Object.entries(AUTOMATION_ACTIONS).map(([k,v])=>`<option value="${k}"${isEdit&&rule.action===k?" selected":""}>${v}</option>`).join("")}</select></div>
-      <div class="fg" id="aut-value-wrap" style="display:none"><label id="aut-value-label">Valor</label><input class="fi" id="aut-value" placeholder="" value="${isEdit&&rule.actionValue?rule.actionValue:''}"/></div>
+      <div class="fg" id="aut-value-wrap" style="display:none"><label id="aut-value-label">Valor</label><input class="fi" id="aut-value" placeholder="" value="${isEdit&&rule.actionValue?escHtml(rule.actionValue):''}"/></div>
     </div>
     <div class="mfoot"><button class="btn-ghost" onclick="this.closest('.mo').remove()">Cancelar</button><button class="btn-cta" onclick="saveAutomationRule(${isEdit?idx:'null'})">💾 Guardar</button></div>
   </div>`;
@@ -5080,9 +5081,9 @@ function renderChatMsg(m){
   const isMe=m.user_id===S.user?.id;
   const time=new Date(m.created).toLocaleTimeString("pt-PT",{hour:"2-digit",minute:"2-digit"});
   return`<div style="display:flex;gap:8px;align-items:flex-end;${isMe?"flex-direction:row-reverse":""};padding:2px 0" class="chat-msg" id="cm-${m.id}">
-    ${!isMe?`<div class="av sm" style="background:${u?.color||"#666"};flex-shrink:0" title="${u?.name||"?"}">${u?.avatar||"?"}</div>`:""}
+    ${!isMe?`<div class="av sm" style="background:${u?.color||"#666"};flex-shrink:0" title="${escHtml(u?.name||"?")}">${u?.avatar||"?"}</div>`:""}
     <div style="max-width:70%">
-      ${!isMe?`<div style="font-size:10.5px;color:var(--t3);margin-bottom:3px;padding-left:4px">${u?.name||"?"}</div>`:""}
+      ${!isMe?`<div style="font-size:10.5px;color:var(--t3);margin-bottom:3px;padding-left:4px">${escHtml(u?.name||"?")}</div>`:""}
       <div style="background:${isMe?"var(--a)":"var(--bg2)"};color:${isMe?"#fff":"var(--t)"};padding:9px 13px;border-radius:${isMe?"14px 14px 4px 14px":"14px 14px 14px 4px"};font-size:13px;line-height:1.5;border:${isMe?"none":"1px solid var(--b1)"};word-break:break-word">
         ${escHtml(m.text)}
       </div>

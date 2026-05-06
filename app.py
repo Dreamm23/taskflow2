@@ -653,7 +653,7 @@ def verify_code():
     color=colors[cnt%len(colors)]
     new_id=uid()
     conn.execute("INSERT INTO users (id,name,email,password,role,avatar,color,bio,department,phone,location,online,joined,skills,google_id,verified) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        (new_id,name,em,pw,"member",initials,color,"","","","",True,datetime.now().strftime("%Y-%m-%d"),"[]",None,True))
+        (new_id,name,em,pw,"member",initials,color,"","","","",1,datetime.now().strftime("%Y-%m-%d"),"[]",None,1))
     conn.commit()
     row=conn.execute("SELECT * FROM users WHERE id=?",(new_id,)).fetchone()
     conn.close()
@@ -717,7 +717,7 @@ def google_auth():
             initials="".join(w[0] for w in name.split())[:2].upper()
             new_id=uid()
             conn.execute("INSERT INTO users (id,name,email,password,role,avatar,color,bio,department,phone,location,online,joined,skills,google_id,verified) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                (new_id,name,email,"google_auth","member",initials,"#6366f1","","","","",True,datetime.now().strftime("%Y-%m-%d"),"[]",gid,True))
+                (new_id,name,email,"google_auth","member",initials,"#6366f1","","","","",1,datetime.now().strftime("%Y-%m-%d"),"[]",gid,1))
             conn.commit()
             row=conn.execute("SELECT * FROM users WHERE id=?",(new_id,)).fetchone()
             u=map_user(row)
@@ -888,11 +888,13 @@ def create_task():
     tid=uid(); conn=get_db()
     try:
         assignee_id=d.get("assignee","")
-        conn.execute("INSERT INTO tasks(id,title,description,status,priority,assignee,tags,deadline,project,subtasks,comments,created,pinned,dependencies,recurrence,recurrence_end) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        completed_at_val = datetime.now().strftime("%Y-%m-%d") if status == "Concluído" else None
+        conn.execute("INSERT INTO tasks(id,title,description,status,priority,assignee,tags,deadline,project,subtasks,comments,created,pinned,dependencies,recurrence,recurrence_end,completed_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (tid,title,desc,status,priority,
              assignee_id,json.dumps(d.get("tags",[])),d.get("deadline") or None,d.get("project",""),
              json.dumps(d.get("subtasks",[])),json.dumps([]),datetime.now().strftime("%Y-%m-%d"),0,
-             json.dumps(d.get("dependencies",[])),d.get("recurrence") or None,d.get("recurrenceEnd") or None))
+             json.dumps(d.get("dependencies",[])),d.get("recurrence") or None,d.get("recurrenceEnd") or None,
+             completed_at_val))
         conn.execute("INSERT INTO activity VALUES (?,?,?,?,?,?,?,?)",
             (uid(),cu["id"],"criou",title,"task","agora","✨",now()))
         if assignee_id and assignee_id != cu["id"]:
@@ -1462,7 +1464,7 @@ def accept_invite():
     cnt      = conn.execute("SELECT COUNT(*) as c FROM users").fetchone()["c"]
     new_id   = uid()
     conn.execute("INSERT INTO users (id,name,email,password,role,avatar,color,bio,department,phone,location,online,joined,skills,google_id,verified) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        (new_id,name,email,hash_password(pw),inv["role"],initials,colors[cnt%len(colors)],"","","","",True,datetime.now().strftime("%Y-%m-%d"),"[]",None,True))
+        (new_id,name,email,hash_password(pw),inv["role"],initials,colors[cnt%len(colors)],"","","","",1,datetime.now().strftime("%Y-%m-%d"),"[]",None,1))
     conn.execute("INSERT INTO notifications VALUES (?,?,?,?,?,?,?)",
         (uid(),inv["invited_by_id"],"team",f"{name} aceitou o convite!",
          f"{name} juntou-se à equipa via convite.",False,now()))
